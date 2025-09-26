@@ -277,6 +277,13 @@ class BCMJobstatsDeployer:
         logger.info("Note: BCM configuration for epilogslurmctld needs to be done manually:")
         logger.info("cmsh -> wlm -> use slurm -> set epilogslurmctld /usr/local/sbin/slurmctldepilog.sh -> commit")
         
+        # BCM Imaging guidance
+        logger.info("")
+        logger.info("BCM IMAGING GUIDANCE:")
+        logger.info("After successful deployment on this node, capture the image:")
+        logger.info(f"cmsh -c 'device;use {host};grabimage -w'")
+        logger.info("This will create an image that can be deployed to all Slurm controllers.")
+        
         return True
 
     def _deploy_login_nodes(self, host: str) -> bool:
@@ -307,6 +314,13 @@ PROM_SERVER = "http://{self.config['prometheus_server']}:{self.config['prometheu
 PROM_RETENTION_DAYS = {self.config['prometheus_retention_days']}
 """
         logger.info(f"Config update needed on {host}:{config_update}")
+        
+        # BCM Imaging guidance
+        logger.info("")
+        logger.info("BCM IMAGING GUIDANCE:")
+        logger.info("After successful deployment on this node, capture the image:")
+        logger.info(f"cmsh -c 'device;use {host};grabimage -w'")
+        logger.info("This will create an image that can be deployed to all login nodes.")
         
         return True
 
@@ -348,6 +362,15 @@ PROM_RETENTION_DAYS = {self.config['prometheus_retention_days']}
             self._run_command(f"systemctl daemon-reload", host)
             self._run_command(f"systemctl enable {service}", host)
             self._run_command(f"systemctl start {service}", host)
+        
+        # BCM Imaging guidance
+        logger.info("")
+        logger.info("BCM IMAGING GUIDANCE:")
+        logger.info("After successful deployment on this node, capture the image:")
+        logger.info(f"cmsh -c 'device;use {host};grabimage -w'")
+        logger.info("This will create an image that can be deployed to all DGX nodes.")
+        logger.info("")
+        logger.info("IMPORTANT: All jobstats files are safe for BCM imaging - no exclude list changes needed.")
         
         return True
 

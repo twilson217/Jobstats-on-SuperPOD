@@ -167,6 +167,40 @@ The deployment script follows BCM best practices:
 - **Configuration Verification**: Uses `cmsh` to verify current BCM settings
 - **Service Management**: Respects BCM's service management patterns
 - **Cluster Detection**: Automatically detects cluster name from BCM
+- **Node Imaging**: Compatible with BCM's `grabimage` process for deploying to multiple nodes
+
+### BCM Node Imaging Workflow
+
+For BCM-managed systems, deploy jobstats on one representative node of each type, then capture and deploy the image:
+
+#### 1. Deploy on Representative Nodes
+```bash
+# Deploy on one DGX node
+python3 deploy_jobstats.py --config config.json
+
+# Deploy on one Slurm controller  
+python3 deploy_jobstats.py --config config.json
+
+# Deploy on one login node
+python3 deploy_jobstats.py --config config.json
+```
+
+#### 2. Capture Images
+```bash
+# Capture DGX node image
+cmsh -c "device;use dgx-node-01;grabimage -w"
+
+# Capture Slurm controller image
+cmsh -c "device;use slurm-controller-01;grabimage -w"
+
+# Capture login node image
+cmsh -c "device;use login-node-01;grabimage -w"
+```
+
+#### 3. Deploy to All Nodes
+BCM will automatically deploy the captured images to all nodes of the same type.
+
+**Important**: All jobstats files are safe for BCM imaging - no exclude list modifications are needed.
 
 ## Usage Examples
 
