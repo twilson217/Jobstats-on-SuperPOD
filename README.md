@@ -84,6 +84,33 @@ This configuration will:
 - Deploy both Prometheus and Grafana on `lab-monitoring`
 - Handle dependency installation efficiently without conflicts
 
+### Existing Monitoring Infrastructure
+
+For environments with existing Prometheus and/or Grafana installations:
+
+```json
+{
+  "cluster_name": "slurm",
+  "prometheus_server": "existing-prometheus.company.com",
+  "grafana_server": "existing-grafana.company.com",
+  "use_existing_prometheus": true,
+  "use_existing_grafana": true,
+  "systems": {
+    "slurm_controller": ["slurm-controller-01"],
+    "login_nodes": ["login-node-01"],
+    "dgx_nodes": ["dgx-node-01", "dgx-node-02"],
+    "prometheus_server": [],
+    "grafana_server": []
+  }
+}
+```
+
+**Important**: When using existing installations:
+- Set `use_existing_prometheus: true` and/or `use_existing_grafana: true`
+- Leave `prometheus_server` and `grafana_server` arrays empty in systems
+- The script will provide detailed configuration guidance instead of installing
+- You'll need to manually configure your existing systems (see below)
+
 ```json
 {
   "cluster_name": "slurm",
@@ -177,6 +204,61 @@ uv run black deploy_jobstats.py
 uv run flake8 deploy_jobstats.py
 ```
 
+## Manual Configuration for Existing Installations
+
+When using existing Prometheus and/or Grafana installations, the script will provide detailed configuration guidance instead of installing new software.
+
+### Existing Prometheus Configuration
+
+The script will output a configuration block to add to your existing `prometheus.yml`:
+
+```yaml
+# Add this job to your existing prometheus.yml scrape_configs:
+  - job_name: 'jobstats-dgx-nodes'
+    scrape_interval: 30s
+    scrape_timeout: 30s
+    static_configs:
+      - targets: 
+        - 'dgx-node-01:9100'  # node_exporter
+        - 'dgx-node-01:9306'  # cgroup_exporter
+        - 'dgx-node-01:9445'  # nvidia_gpu_exporter
+        - 'dgx-node-02:9100'  # node_exporter
+        - 'dgx-node-02:9306'  # cgroup_exporter
+        - 'dgx-node-02:9445'  # nvidia_gpu_exporter
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: '^go_.*'
+        action: drop
+      - source_labels: [__name__]
+        regex: '^slurm_.*'
+        target_label: 'cluster'
+        replacement: 'slurm'
+```
+
+**Steps:**
+1. Add the configuration to your existing `prometheus.yml`
+2. Reload Prometheus: `curl -X POST http://localhost:9090/-/reload`
+3. Verify targets: http://localhost:9090/targets
+
+### Existing Grafana Configuration
+
+**Add Prometheus Data Source:**
+- URL: `http://your-prometheus-server:9090`
+- Access: Server (default)
+- Basic Auth: Disabled (unless required)
+- Skip TLS Verify: Yes (unless using HTTPS)
+
+**Import Dashboards:**
+- Dashboard ID: 1860 (Node Exporter Full)
+- Dashboard ID: 1443 (NVIDIA GPU Metrics)
+- Or create custom dashboards using jobstats metrics
+
+**Key Metrics to Monitor:**
+- `slurm_job_*` (job statistics)
+- `nvidia_*` (GPU metrics)
+- `node_*` (system metrics)
+- `cgroup_*` (resource usage)
+
 ## Troubleshooting
 
 ### Common Issues
@@ -185,6 +267,7 @@ uv run flake8 deploy_jobstats.py
 2. **BCM Access**: Verify `cmsh` is available and you have appropriate permissions
 3. **Repository Access**: Ensure internet access for cloning GitHub repositories
 4. **Permissions**: Run from BCM head node with administrative access
+5. **Existing Installations**: Ensure you have admin access to configure existing Prometheus/Grafana
 
 ### Verification Commands
 

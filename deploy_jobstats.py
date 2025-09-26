@@ -86,6 +86,8 @@ class BCMJobstatsDeployer:
             'cgroup_exporter_port': 9306,
             'nvidia_gpu_exporter_port': 9445,
             'prometheus_retention_days': 365,
+            'use_existing_prometheus': False,
+            'use_existing_grafana': False,
             'systems': {
                 'slurm_controller': [],
                 'login_nodes': [],
@@ -574,6 +576,91 @@ WantedBy=multi-user.target
         
         return True
 
+    def _handle_existing_prometheus(self) -> bool:
+        """Provide guidance for existing Prometheus configuration."""
+        logger.info("Using existing Prometheus server - manual configuration required")
+        logger.info("=" * 60)
+        logger.info("PROMETHEUS CONFIGURATION REQUIRED:")
+        logger.info("=" * 60)
+        
+        # Get DGX nodes from config
+        dgx_nodes = self.config['systems']['dgx_nodes']
+        if not dgx_nodes:
+            logger.warning("No DGX nodes configured, using placeholder targets")
+            dgx_nodes = ['dgx-node-01', 'dgx-node-02']
+        
+        # Build targets list
+        targets = []
+        for node in dgx_nodes:
+            targets.extend([
+                f"        - '{node}:{self.config['node_exporter_port']}'  # node_exporter",
+                f"        - '{node}:{self.config['cgroup_exporter_port']}'  # cgroup_exporter",
+                f"        - '{node}:{self.config['nvidia_gpu_exporter_port']}'  # nvidia_gpu_exporter"
+            ])
+        
+        targets_yaml = '\n'.join(targets)
+        cluster_name = self._get_cluster_name()
+        
+        prometheus_config = f"""# Add this job to your existing prometheus.yml scrape_configs:
+  - job_name: 'jobstats-dgx-nodes'
+    scrape_interval: 30s
+    scrape_timeout: 30s
+    static_configs:
+      - targets: 
+{targets_yaml}
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: '^go_.*'
+        action: drop
+      - source_labels: [__name__]
+        regex: '^slurm_.*'
+        target_label: 'cluster'
+        replacement: '{cluster_name}'
+"""
+        
+        logger.info(prometheus_config)
+        logger.info("=" * 60)
+        logger.info("INSTRUCTIONS:")
+        logger.info("1. Add the above job configuration to your existing prometheus.yml")
+        logger.info("2. Reload Prometheus configuration: curl -X POST http://localhost:9090/-/reload")
+        logger.info("3. Verify targets are discovered: http://localhost:9090/targets")
+        logger.info("=" * 60)
+        
+        return True
+
+    def _handle_existing_grafana(self) -> bool:
+        """Provide guidance for existing Grafana configuration."""
+        logger.info("Using existing Grafana server - manual configuration required")
+        logger.info("=" * 60)
+        logger.info("GRAFANA CONFIGURATION REQUIRED:")
+        logger.info("=" * 60)
+        
+        prometheus_url = f"http://{self.config['prometheus_server']}:{self.config['prometheus_port']}"
+        
+        logger.info("1. ADD PROMETHEUS DATA SOURCE:")
+        logger.info(f"   - URL: {prometheus_url}")
+        logger.info("   - Access: Server (default)")
+        logger.info("   - Basic Auth: Disabled (unless your Prometheus requires it)")
+        logger.info("   - Skip TLS Verify: Yes (unless using HTTPS)")
+        logger.info("")
+        logger.info("2. IMPORT JOBSTATS DASHBOARDS:")
+        logger.info("   - Dashboard ID: 1860 (Node Exporter Full)")
+        logger.info("   - Dashboard ID: 1443 (NVIDIA GPU Metrics)")
+        logger.info("   - Or create custom dashboards using jobstats metrics")
+        logger.info("")
+        logger.info("3. KEY METRICS TO MONITOR:")
+        logger.info("   - slurm_job_* (job statistics)")
+        logger.info("   - nvidia_* (GPU metrics)")
+        logger.info("   - node_* (system metrics)")
+        logger.info("   - cgroup_* (resource usage)")
+        logger.info("")
+        logger.info("4. ACCESS GRAFANA:")
+        logger.info(f"   - URL: http://{self.config['grafana_server']}:{self.config['grafana_port']}")
+        logger.info("   - Default credentials: admin/admin (change on first login)")
+        logger.info("=" * 60)
+        
+        return True
+
     def _deploy_host(self, host: str, roles: List[str]) -> bool:
         """Deploy all required components for a host with multiple roles."""
         logger.info(f"Deploying to {host} with roles: {', '.join(roles)}")
@@ -654,6 +741,15 @@ WantedBy=multi-user.target
         for host, roles in host_roles.items():
             logger.info(f"  {host}: {', '.join(roles)}")
         
+        # Handle existing Prometheus/Grafana installations
+        if self.config.get('use_existing_prometheus', False):
+            logger.info("Existing Prometheus detected - providing configuration guidance")
+            self._handle_existing_prometheus()
+        
+        if self.config.get('use_existing_grafana', False):
+            logger.info("Existing Grafana detected - providing configuration guidance")
+            self._handle_existing_grafana()
+        
         # Deploy to each unique host
         deployment_success = True
         
@@ -661,12 +757,26 @@ WantedBy=multi-user.target
             logger.info(f"Processing host: {host}")
             
             try:
-                success = self._deploy_host(host, roles)
-                if not success:
-                    logger.error(f"Deployment failed for {host}")
-                    deployment_success = False
+                # Skip Prometheus/Grafana deployment if using existing installations
+                filtered_roles = []
+                for role in roles:
+                    if role == 'prometheus_server' and self.config.get('use_existing_prometheus', False):
+                        logger.info(f"Skipping Prometheus deployment on {host} (using existing)")
+                        continue
+                    elif role == 'grafana_server' and self.config.get('use_existing_grafana', False):
+                        logger.info(f"Skipping Grafana deployment on {host} (using existing)")
+                        continue
+                    filtered_roles.append(role)
+                
+                if filtered_roles:
+                    success = self._deploy_host(host, filtered_roles)
+                    if not success:
+                        logger.error(f"Deployment failed for {host}")
+                        deployment_success = False
+                    else:
+                        logger.info(f"Deployment completed successfully for {host}")
                 else:
-                    logger.info(f"Deployment completed successfully for {host}")
+                    logger.info(f"No deployment needed for {host} (all roles skipped)")
             
             except Exception as e:
                 logger.error(f"Error deploying to {host}: {e}")
