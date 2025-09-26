@@ -909,19 +909,19 @@ BCM will automatically deploy the captured images to all nodes of the same type.
 
 **No exclude list modifications needed** - all jobstats files are compatible with BCM imaging.
 
-## Lab Environment Considerations
+## Shared Host Considerations
 
-For lab environments where systems share roles (e.g., same node for Slurm controller and login):
+For environments where systems share roles (e.g., same node for Slurm controller and login, commonly called "slogin" nodes):
 
 ### Shared Host Configuration
 ```json
 {
   "systems": {
-    "slurm_controller": ["lab-slurm-controller"],
-    "login_nodes": ["lab-slurm-controller"],
+    "slurm_controller": ["slogin-01"],
+    "login_nodes": ["slogin-01"],
     "dgx_nodes": ["dgx-node-01", "dgx-node-02"],
-    "prometheus_server": ["lab-monitoring"],
-    "grafana_server": ["lab-monitoring"]
+    "prometheus_server": ["monitoring-01"],
+    "grafana_server": ["monitoring-01"]
   }
 }
 ```

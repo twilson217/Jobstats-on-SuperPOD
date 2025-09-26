@@ -4,7 +4,7 @@ BCM Jobstats Deployment Automation Script - Shared Host Support
 
 This script automates the deployment of Princeton University's jobstats monitoring platform
 on BCM-managed DGX systems. It uses cmsh to verify configurations and supports dry-run mode.
-This version properly handles shared hosts (e.g., same node for slurm controller and login).
+This version properly handles shared hosts (e.g., same node for slurm controller and login, commonly called "slogin" nodes).
 
 Usage:
     python deploy_jobstats_shared.py [--dry-run] [--config CONFIG_FILE]

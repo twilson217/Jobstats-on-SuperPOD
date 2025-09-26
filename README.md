@@ -56,33 +56,33 @@ The `config.json` file defines your cluster topology and settings:
 
 ### Shared Host Support
 
-The deployment script intelligently handles shared hosts (common in lab environments):
+The deployment script intelligently handles shared hosts (common in production environments):
 - **Same host for multiple roles**: Automatically detects and deploys all required components
 - **Dependency optimization**: Avoids duplicate package installations
 - **Role-based deployment**: Each role's components are deployed in the correct order
 
-### Lab Environment Example
+### Shared Host Example
 
-For lab environments where the Slurm controller and login node are the same, and Prometheus and Grafana share a server:
+For environments where the Slurm controller and login node are the same (commonly called "slogin" nodes), and Prometheus and Grafana share a server:
 
 ```json
 {
   "cluster_name": "slurm",
-  "prometheus_server": "lab-monitoring",
-  "grafana_server": "lab-monitoring",
+  "prometheus_server": "monitoring-01",
+  "grafana_server": "monitoring-01",
   "systems": {
-    "slurm_controller": ["lab-slurm-controller"],
-    "login_nodes": ["lab-slurm-controller"],
+    "slurm_controller": ["slogin-01"],
+    "login_nodes": ["slogin-01"],
     "dgx_nodes": ["dgx-node-01", "dgx-node-02"],
-    "prometheus_server": ["lab-monitoring"],
-    "grafana_server": ["lab-monitoring"]
+    "prometheus_server": ["monitoring-01"],
+    "grafana_server": ["monitoring-01"]
   }
 }
 ```
 
 This configuration will:
-- Deploy both Slurm controller and login node components on `lab-slurm-controller`
-- Deploy both Prometheus and Grafana on `lab-monitoring`
+- Deploy both Slurm controller and login node components on `slogin-01`
+- Deploy both Prometheus and Grafana on `monitoring-01`
 - Handle dependency installation efficiently without conflicts
 
 ### Existing Monitoring Infrastructure

@@ -1,7 +1,7 @@
 {
   "cluster_name": "slurm",
-  "prometheus_server": "lab-monitoring",
-  "grafana_server": "lab-monitoring",
+  "prometheus_server": "monitoring-01",
+  "grafana_server": "monitoring-01",
   "prometheus_port": 9090,
   "grafana_port": 3000,
   "node_exporter_port": 9100,
@@ -15,20 +15,20 @@
   "kubernetes_category": "kubernetes-category",
   "systems": {
     "slurm_controller": [
-      "lab-slurm-controller"
+      "slogin-01"
     ],
     "login_nodes": [
-      "lab-slurm-controller"
+      "slogin-01"
     ],
     "dgx_nodes": [
       "dgx-node-01",
       "dgx-node-02"
     ],
     "prometheus_server": [
-      "lab-monitoring"
+      "monitoring-01"
     ],
     "grafana_server": [
-      "lab-monitoring"
+      "monitoring-01"
     ]
   }
 }
