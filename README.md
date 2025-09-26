@@ -7,6 +7,7 @@ This project provides automated deployment of Princeton University's jobstats mo
 - **BCM Integration**: Uses `cmsh` to verify configurations and follows BCM best practices
 - **Symlink Pattern**: Implements BCM's shared storage symlink pattern for script management
 - **Shared Host Support**: Intelligently handles shared systems (e.g., same node for Slurm controller and login)
+- **BCM Category-Based Service Management**: Automatically manages jobstats services based on BCM categories (Slurm vs Kubernetes)
 - **Dry Run Mode**: Preview all commands before execution
 - **Multi-System Support**: Deploys across Slurm controllers, login nodes, DGX nodes, and monitoring servers
 - **Dependency Management**: Uses `uv` for Python project management
@@ -110,6 +111,38 @@ For environments with existing Prometheus and/or Grafana installations:
 - Leave `prometheus_server` and `grafana_server` arrays empty in systems
 - The script will provide detailed configuration guidance instead of installing
 - You'll need to manually configure your existing systems (see below)
+
+### BCM Category-Based Service Management
+
+For customers with mixed DGX environments (Slurm and Kubernetes categories), jobstats services can be tied to the Slurm category so they automatically start/stop when nodes switch between categories:
+
+```json
+{
+  "cluster_name": "slurm",
+  "bcm_category_management": true,
+  "slurm_category": "slurm-category",
+  "kubernetes_category": "kubernetes-category",
+  "systems": {
+    "dgx_nodes": ["dgx-node-01", "dgx-node-02", "dgx-node-03"],
+    "slurm_dgx_nodes": ["dgx-node-01", "dgx-node-02"],
+    "kubernetes_dgx_nodes": ["dgx-node-03"]
+  }
+}
+```
+
+**Benefits**:
+- **Same software image** for all DGX nodes
+- **Automatic service management** based on category assignment
+- **No manual intervention** when switching between Slurm and Kubernetes
+- **Clean separation** of services by workload type
+- **No reboots required** when changing categories
+
+**How it works**:
+1. Services are defined at the BCM category level
+2. When a node changes category, BCM automatically starts/stops services
+3. Jobstats services are tied to the Slurm category
+4. Kubernetes nodes automatically stop jobstats services
+5. Slurm nodes automatically start jobstats services
 
 ```json
 {

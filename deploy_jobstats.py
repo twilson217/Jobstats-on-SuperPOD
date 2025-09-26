@@ -88,6 +88,9 @@ class BCMJobstatsDeployer:
             'prometheus_retention_days': 365,
             'use_existing_prometheus': False,
             'use_existing_grafana': False,
+            'bcm_category_management': False,
+            'slurm_category': 'slurm-category',
+            'kubernetes_category': 'kubernetes-category',
             'systems': {
                 'slurm_controller': [],
                 'login_nodes': [],
@@ -356,12 +359,19 @@ PROM_RETENTION_DAYS = {self.config['prometheus_retention_days']}
         # Create systemd services
         self._create_systemd_services(host)
         
-        # Enable and start services
-        services = ['cgroup_exporter', 'node_exporter', 'nvidia_gpu_prometheus_exporter']
-        for service in services:
+        # Handle service management based on configuration
+        if self.config.get('bcm_category_management', False):
+            # For BCM category management, don't enable services at systemd level
+            # Services will be managed by BCM category system
+            logger.info("BCM category management enabled - services will be managed by BCM categories")
             self._run_command(f"systemctl daemon-reload", host)
-            self._run_command(f"systemctl enable {service}", host)
-            self._run_command(f"systemctl start {service}", host)
+        else:
+            # Traditional systemd service management
+            services = ['cgroup_exporter', 'node_exporter', 'nvidia_gpu_prometheus_exporter']
+            for service in services:
+                self._run_command(f"systemctl daemon-reload", host)
+                self._run_command(f"systemctl enable {service}", host)
+                self._run_command(f"systemctl start {service}", host)
         
         # BCM Imaging guidance
         logger.info("")
@@ -371,6 +381,49 @@ PROM_RETENTION_DAYS = {self.config['prometheus_retention_days']}
         logger.info("This will create an image that can be deployed to all DGX nodes.")
         logger.info("")
         logger.info("IMPORTANT: All jobstats files are safe for BCM imaging - no exclude list changes needed.")
+        
+        return True
+
+    def _setup_bcm_category_services(self) -> bool:
+        """Set up BCM category-based service management for jobstats services."""
+        if not self.config.get('bcm_category_management', False):
+            return True
+            
+        logger.info("Setting up BCM category-based service management...")
+        
+        slurm_category = self.config.get('slurm_category', 'slurm-category')
+        
+        # Check if category exists, create if not
+        returncode, stdout, stderr = self._run_command(f"cmsh -c 'category; list' | grep -q '{slurm_category}'")
+        if returncode != 0:
+            logger.info(f"Creating Slurm category: {slurm_category}")
+            self._run_command(f"cmsh -c 'category; clone default {slurm_category}; commit'")
+        
+        # Add jobstats services to Slurm category
+        services = ['cgroup_exporter', 'node_exporter', 'nvidia_gpu_prometheus_exporter']
+        
+        for service in services:
+            logger.info(f"Adding {service} to {slurm_category} category...")
+            
+            # Add service to category
+            self._run_command(f"cmsh -c 'category; use {slurm_category}; services; add {service}'")
+            
+            # Configure service with autostart and monitoring
+            self._run_command(f"cmsh -c 'category; use {slurm_category}; services; use {service}; set autostart yes; set monitored yes; commit'")
+        
+        logger.info("")
+        logger.info("BCM CATEGORY SERVICE MANAGEMENT SETUP COMPLETE:")
+        logger.info(f"Jobstats services have been added to the '{slurm_category}' category.")
+        logger.info("")
+        logger.info("To assign DGX nodes to this category, run:")
+        for host in self.config['systems']['dgx_nodes']:
+            logger.info(f"  cmsh -c 'device; use {host}; set category {slurm_category}; commit'")
+        logger.info("")
+        logger.info("To switch nodes between Slurm and Kubernetes categories:")
+        logger.info(f"  # Switch to Kubernetes: cmsh -c 'device; use <hostname>; set category {self.config.get('kubernetes_category', 'kubernetes-category')}; commit'")
+        logger.info(f"  # Switch to Slurm: cmsh -c 'device; use <hostname>; set category {slurm_category}; commit'")
+        logger.info("")
+        logger.info("Services will automatically start/stop when nodes change categories.")
         
         return True
 
@@ -772,6 +825,13 @@ WantedBy=multi-user.target
         if self.config.get('use_existing_grafana', False):
             logger.info("Existing Grafana detected - providing configuration guidance")
             self._handle_existing_grafana()
+        
+        # Set up BCM category-based service management if enabled
+        if self.config.get('bcm_category_management', False):
+            logger.info("BCM category-based service management enabled")
+            if not self._setup_bcm_category_services():
+                logger.error("Failed to set up BCM category services")
+                return False
         
         # Deploy to each unique host
         deployment_success = True

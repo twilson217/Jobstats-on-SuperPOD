@@ -10,27 +10,14 @@
   "prometheus_retention_days": 365,
   "use_existing_prometheus": false,
   "use_existing_grafana": false,
-  "bcm_category_management": false,
+  "bcm_category_management": true,
   "slurm_category": "slurm-category",
   "kubernetes_category": "kubernetes-category",
   "systems": {
-    "slurm_controller": [
-      "slurm-controller-01"
-    ],
-    "login_nodes": [
-      "login-node-01",
-      "login-node-02"
-    ],
-    "dgx_nodes": [
-      "dgx-node-01",
-      "dgx-node-02",
-      "dgx-node-03"
-    ],
-    "prometheus_server": [
-      "monitoring-server"
-    ],
-    "grafana_server": [
-      "monitoring-server"
-    ]
+    "slurm_controller": ["slurm-controller-01"],
+    "login_nodes": ["login-node-01"],
+    "dgx_nodes": ["dgx-node-01", "dgx-node-02", "dgx-node-03"],
+    "prometheus_server": ["prometheus-server"],
+    "grafana_server": ["grafana-server"]
   }
 }

@@ -932,6 +932,129 @@ The deployment script automatically handles shared hosts by:
 - Optimizing dependency installation to avoid duplicates
 - Providing appropriate imaging guidance for each role
 
+## BCM Category-Based Service Management
+
+For customers with mixed DGX environments (Slurm and Kubernetes categories), jobstats services can be tied to the Slurm category so they automatically start/stop when nodes switch between categories. This ensures:
+
+- **Same software image** used for all DGX nodes
+- **Automatic service management** based on category assignment
+- **No manual intervention** when switching between Slurm and Kubernetes
+- **Clean separation** of services by workload type
+
+### How BCM Category Service Management Works
+
+BCM provides category-based service management where:
+1. **Services are defined at category level** using `cmsh` or Base View
+2. **When a node changes category**, BCM automatically:
+   - Stops services from the old category (if `autostart` was enabled)
+   - Starts services from the new category (if `autostart` is enabled)
+3. **No reboot required** - services are managed dynamically
+4. **Same image used** - only service configuration changes
+
+### Implementation Steps
+
+#### Step 1: Create Slurm Category (if not exists)
+```bash
+# Check existing categories
+cmsh -c "category; list"
+
+# Clone default category for Slurm nodes (if needed)
+cmsh -c "category; clone default slurm-category; commit"
+```
+
+#### Step 2: Add Jobstats Services to Slurm Category
+```bash
+# Add jobstats services to the Slurm category
+cmsh -c "category; use slurm-category; services; add cgroup_exporter"
+cmsh -c "category; use slurm-category; services; add node_exporter" 
+cmsh -c "category; use slurm-category; services; add nvidia_gpu_prometheus_exporter"
+
+# Configure each service with autostart and monitoring
+cmsh -c "category; use slurm-category; services; use cgroup_exporter; set autostart yes; set monitored yes; commit"
+cmsh -c "category; use slurm-category; services; use node_exporter; set autostart yes; set monitored yes; commit"
+cmsh -c "category; use slurm-category; services; use nvidia_gpu_prometheus_exporter; set autostart yes; set monitored yes; commit"
+```
+
+#### Step 3: Assign Nodes to Categories
+```bash
+# Assign DGX nodes to Slurm category
+cmsh -c "device; use dgx-node-01; set category slurm-category; commit"
+cmsh -c "device; use dgx-node-02; set category slurm-category; commit"
+
+# Assign DGX nodes to Kubernetes category (when needed)
+cmsh -c "device; use dgx-node-01; set category kubernetes-category; commit"
+```
+
+### Category-Based Configuration Example
+
+```json
+{
+  "bcm_category_management": true,
+  "slurm_category": "slurm-category",
+  "kubernetes_category": "kubernetes-category",
+  "systems": {
+    "dgx_nodes": ["dgx-node-01", "dgx-node-02", "dgx-node-03"],
+    "slurm_dgx_nodes": ["dgx-node-01", "dgx-node-02"],
+    "kubernetes_dgx_nodes": ["dgx-node-03"]
+  }
+}
+```
+
+### Workflow Example
+
+#### Initial Setup
+```bash
+# 1. Deploy jobstats on representative DGX node
+python3 deploy_jobstats.py --config config.json
+
+# 2. Add services to Slurm category
+cmsh -c "category; use slurm-category; services; add cgroup_exporter; set autostart yes; set monitored yes; commit"
+
+# 3. Assign nodes to Slurm category
+cmsh -c "device; use dgx-node-01; set category slurm-category; commit"
+```
+
+#### Switching to Kubernetes
+```bash
+# 1. Change node category to Kubernetes
+cmsh -c "device; use dgx-node-01; set category kubernetes-category; commit"
+
+# 2. Jobstats services automatically stop
+# 3. Kubernetes services automatically start
+# 4. No reboot required
+```
+
+#### Switching Back to Slurm
+```bash
+# 1. Change node category back to Slurm
+cmsh -c "device; use dgx-node-01; set category slurm-category; commit"
+
+# 2. Jobstats services automatically start
+# 3. Kubernetes services automatically stop
+# 4. No reboot required
+```
+
+### Verification Commands
+```bash
+# Check service status by category
+cmsh -c "category; use slurm-category; services; status"
+
+# Check node category assignment
+cmsh -c "device; use dgx-node-01; show category"
+
+# Check service status on specific node
+cmsh -c "device; use dgx-node-01; services; status"
+```
+
+### Benefits
+
+1. **Dynamic Service Management**: Services automatically start/stop with category changes
+2. **Same Image**: All DGX nodes use identical software image
+3. **No Reboots**: Category changes don't require node reboots
+4. **Centralized Control**: All service management through BCM
+5. **Clean Separation**: Slurm and Kubernetes services are isolated
+6. **Easy Switching**: Simple category assignment changes node behavior
+
 ## Existing Monitoring Infrastructure
 
 For environments with existing Prometheus and/or Grafana installations:

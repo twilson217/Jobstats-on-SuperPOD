@@ -10,6 +10,9 @@
   "prometheus_retention_days": 365,
   "use_existing_prometheus": true,
   "use_existing_grafana": true,
+  "bcm_category_management": false,
+  "slurm_category": "slurm-category",
+  "kubernetes_category": "kubernetes-category",
   "systems": {
     "slurm_controller": [
       "slurm-controller-01"
