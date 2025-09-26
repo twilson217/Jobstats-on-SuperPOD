@@ -130,6 +130,41 @@ ls -la /opt/jobstats-deployment/node_exporter/
 
 **Recommended approach**: Clone repositories on each system that needs them, as this ensures each system has the latest code and doesn't depend on shared storage availability.
 
+## Deployment Options
+
+This guide provides two deployment approaches:
+
+### Option 1: Automated Deployment (Recommended)
+Use the Python automation script for streamlined deployment:
+
+```bash
+# Clone the deployment repository
+git clone <repository-url>
+cd jobstats-on-superpod
+
+# Configure your environment
+cp config.json.template config.json
+# Edit config.json with your system hostnames
+
+# Or use pre-configured examples:
+# cp config-lab.json config.json          # For lab environments
+# cp config-existing-monitoring.json config.json  # For existing monitoring
+
+# Run automated deployment
+python3 deploy_jobstats.py --config config.json
+```
+
+**Benefits:**
+- Automated dependency installation
+- BCM configuration verification
+- Shared host support
+- Existing monitoring infrastructure support
+- BCM imaging guidance
+- Dry-run mode for testing
+
+### Option 2: Manual Step-by-Step Deployment
+Follow the detailed manual instructions below for complete control over each step.
+
 ## Production Deployment by System
 
 ### Prerequisites
@@ -826,25 +861,145 @@ mount | grep cgroup
 - **BCM logs**: `/var/log/cm/` (CMDaemon logs)
 - **Slurm logs**: `/cm/shared/apps/slurm/var/log/` (BCM-managed Slurm logs)
 
+## BCM Node Imaging Workflow
+
+For BCM-managed systems, the recommended approach is to deploy jobstats on one representative node of each type, then capture and deploy the image using BCM's imaging system.
+
+### Imaging Process
+
+**Step 1: Deploy on Representative Nodes**
+Deploy jobstats on one node of each type (DGX, Slurm controller, login node):
+
+```bash
+# Deploy on one DGX node
+python3 deploy_jobstats.py --config config.json
+
+# Deploy on one Slurm controller  
+python3 deploy_jobstats.py --config config.json
+
+# Deploy on one login node
+python3 deploy_jobstats.py --config config.json
+```
+
+**Step 2: Capture Images**
+After successful deployment, capture the image for each node type:
+
+```bash
+# Capture DGX node image
+cmsh -c "device;use dgx-node-01;grabimage -w"
+
+# Capture Slurm controller image
+cmsh -c "device;use slurm-controller-01;grabimage -w"
+
+# Capture login node image
+cmsh -c "device;use login-node-01;grabimage -w"
+```
+
+**Step 3: Deploy to All Nodes**
+BCM will automatically deploy the captured images to all nodes of the same type.
+
+### Imaging Safety Analysis
+
+**✅ All jobstats files are safe for BCM imaging:**
+- **Shared storage files** (`/cm/shared/apps/slurm/var/cm/`) - meant to be identical
+- **Binary files** (`/usr/local/bin/`) - identical across all nodes
+- **Systemd services** (`/etc/systemd/system/`) - identical across all nodes
+- **Configuration files** - use hostname templating that works on each node
+- **No host-specific files** created that would cause conflicts
+
+**No exclude list modifications needed** - all jobstats files are compatible with BCM imaging.
+
+## Lab Environment Considerations
+
+For lab environments where systems share roles (e.g., same node for Slurm controller and login):
+
+### Shared Host Configuration
+```json
+{
+  "systems": {
+    "slurm_controller": ["lab-slurm-controller"],
+    "login_nodes": ["lab-slurm-controller"],
+    "dgx_nodes": ["dgx-node-01", "dgx-node-02"],
+    "prometheus_server": ["lab-monitoring"],
+    "grafana_server": ["lab-monitoring"]
+  }
+}
+```
+
+The deployment script automatically handles shared hosts by:
+- Detecting multiple roles on the same host
+- Installing all required components for all roles
+- Optimizing dependency installation to avoid duplicates
+- Providing appropriate imaging guidance for each role
+
+## Existing Monitoring Infrastructure
+
+For environments with existing Prometheus and/or Grafana installations:
+
+### Configuration Options
+```json
+{
+  "use_existing_prometheus": true,
+  "use_existing_grafana": true,
+  "prometheus_server": "existing-prometheus.company.com",
+  "grafana_server": "existing-grafana.company.com",
+  "systems": {
+    "prometheus_server": [],
+    "grafana_server": []
+  }
+}
+```
+
+### Manual Configuration Required
+
+**For Existing Prometheus:**
+Add this job to your existing `prometheus.yml`:
+```yaml
+  - job_name: 'jobstats-dgx-nodes'
+    scrape_interval: 30s
+    scrape_timeout: 30s
+    static_configs:
+      - targets: 
+        - 'dgx-node-01:9100'  # node_exporter
+        - 'dgx-node-01:9306'  # cgroup_exporter
+        - 'dgx-node-01:9445'  # nvidia_gpu_exporter
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: '^go_.*'
+        action: drop
+      - source_labels: [__name__]
+        regex: '^slurm_.*'
+        target_label: 'cluster'
+        replacement: 'slurm'
+```
+
+Then reload: `curl -X POST http://localhost:9090/-/reload`
+
+**For Existing Grafana:**
+1. Add Prometheus data source: `http://your-prometheus-server:9090`
+2. Import dashboards: ID 1860 (Node Exporter), ID 1443 (NVIDIA GPU)
+3. Create custom dashboards using jobstats metrics
+
 ## Next Steps
 
-1. **Clone Required Repositories**: 
-   - Clone all required repositories to `/opt/jobstats-deployment/` on each system that needs them
-   - Verify repository contents and file structure
-2. **Configure BCM Slurm Settings**: 
-   - Use `cmsh` or Base View GUI to configure prolog/epilog paths
-   - Verify BCM cgroup configuration is compatible with jobstats
-3. **Deploy Scripts to BCM Structure**: 
-   - Place prolog/epilog scripts in `/cm/local/apps/slurm/var/prologs/` and `/cm/local/apps/slurm/var/epilogs/`
-   - Use proper BCM naming convention (e.g., `60-prolog-jobstats.sh`)
-   - Follow BCM symlink pattern for shared storage
-4. **Import Grafana Dashboard**: Import the jobstats dashboard from the repository
-5. **Test with Sample Jobs**: Run test jobs to verify metrics collection and BCM integration
-6. **Configure Alerts**: Set up Grafana alerts for job efficiency issues
-7. **User Training**: Provide documentation for users on using the jobstats command
-8. **BCM Integration Verification**: 
-   - Verify BCM service management doesn't conflict with jobstats
-   - Test BCM cluster operations with jobstats running
+1. **Choose Deployment Method**: 
+   - **Automated**: Use `python3 deploy_jobstats.py --config config.json`
+   - **Manual**: Follow step-by-step instructions in this guide
+2. **Configure for Your Environment**:
+   - **Lab setup**: Use shared host configuration
+   - **Existing monitoring**: Use existing infrastructure configuration
+   - **Production**: Use standard multi-node configuration
+3. **BCM Imaging** (if applicable):
+   - Deploy on representative nodes
+   - Capture images with `grabimage -w`
+   - Deploy to all nodes of same type
+4. **Verify Deployment**: 
+   - Check all services are running
+   - Test jobstats command functionality
+   - Verify metrics collection in Prometheus
+   - Test Grafana dashboards
+5. **User Training**: Provide documentation for users on using the jobstats command
+6. **Monitoring Setup**: Configure alerts and regular monitoring procedures
 
 ## Additional Resources
 
