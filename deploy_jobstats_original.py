@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
-BCM Jobstats Deployment Automation Script - Shared Host Support
+BCM Jobstats Deployment Automation Script
 
 This script automates the deployment of Princeton University's jobstats monitoring platform
 on BCM-managed DGX systems. It uses cmsh to verify configurations and supports dry-run mode.
-This version properly handles shared hosts (e.g., same node for slurm controller and login).
 
 Usage:
-    python deploy_jobstats_shared.py [--dry-run] [--config CONFIG_FILE]
+    python deploy_jobstats.py [--dry-run] [--config CONFIG_FILE]
 
 Requirements:
     - Run from BCM head node with passwordless SSH access to all target systems
@@ -34,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 class BCMJobstatsDeployer:
-    """Main deployment class for BCM jobstats automation with shared host support."""
+    """Main deployment class for BCM jobstats automation."""
     
     def __init__(self, dry_run: bool = False, config_file: Optional[str] = None):
         self.dry_run = dry_run
@@ -169,18 +168,6 @@ class BCMJobstatsDeployer:
         logger.warning(f"Could not detect cluster name, using default: {self.config['cluster_name']}")
         return self.config['cluster_name']
 
-    def _get_host_roles(self) -> Dict[str, List[str]]:
-        """Get all roles for each unique host."""
-        host_roles = {}
-        
-        for system_type, hosts in self.config['systems'].items():
-            for host in hosts:
-                if host not in host_roles:
-                    host_roles[host] = []
-                host_roles[host].append(system_type)
-        
-        return host_roles
-
     def _clone_repositories(self, host: str, repositories: List[str]) -> bool:
         """Clone required repositories on a host."""
         logger.info(f"Cloning repositories on {host}...")
@@ -284,6 +271,9 @@ class BCMJobstatsDeployer:
         # Clone repositories
         self._clone_repositories(host, self.system_roles['login_nodes']['repositories'])
         
+        # Install dependencies
+        self._install_dependencies(host, 'login_nodes')
+        
         # Copy jobstats files
         jobstats_files = [
             'jobstats/jobstats',
@@ -314,6 +304,9 @@ PROM_RETENTION_DAYS = {self.config['prometheus_retention_days']}
         
         # Clone repositories
         self._clone_repositories(host, self.system_roles['dgx_nodes']['repositories'])
+        
+        # Install dependencies
+        self._install_dependencies(host, 'dgx_nodes')
         
         # Build and install exporters
         exporters = [
@@ -432,6 +425,9 @@ WantedBy=multi-user.target
     def _deploy_prometheus_server(self, host: str) -> bool:
         """Deploy Prometheus server."""
         logger.info(f"Deploying Prometheus server on {host}...")
+        
+        # Install dependencies
+        self._install_dependencies(host, 'prometheus_server')
         
         # Download and install Prometheus
         prometheus_version = "2.45.0"
@@ -559,6 +555,9 @@ WantedBy=multi-user.target
         """Deploy Grafana server."""
         logger.info(f"Deploying Grafana server on {host}...")
         
+        # Install dependencies
+        self._install_dependencies(host, 'grafana_server')
+        
         # Install Grafana
         self._run_command("wget -q -O - https://packages.grafana.com/gpg.key | apt-key add -", host)
         self._run_command('echo "deb https://packages.grafana.com/oss/deb stable main" > /etc/apt/sources.list.d/grafana.list', host)
@@ -573,52 +572,6 @@ WantedBy=multi-user.target
         logger.info("Default credentials: admin/admin")
         
         return True
-
-    def _deploy_host(self, host: str, roles: List[str]) -> bool:
-        """Deploy all required components for a host with multiple roles."""
-        logger.info(f"Deploying to {host} with roles: {', '.join(roles)}")
-        
-        deployment_success = True
-        
-        # Install dependencies for all roles (avoid duplicates)
-        unique_deps = set()
-        for role in roles:
-            if role in self.system_roles:
-                unique_deps.add(role)
-        
-        for dep_role in unique_deps:
-            if not self._install_dependencies(host, dep_role):
-                logger.error(f"Failed to install dependencies for {dep_role} on {host}")
-                deployment_success = False
-        
-        # Deploy components for each role
-        for role in roles:
-            try:
-                if role == 'slurm_controller':
-                    success = self._deploy_slurm_controller(host)
-                elif role == 'login_nodes':
-                    success = self._deploy_login_nodes(host)
-                elif role == 'dgx_nodes':
-                    success = self._deploy_dgx_nodes(host)
-                elif role == 'prometheus_server':
-                    success = self._deploy_prometheus_server(host)
-                elif role == 'grafana_server':
-                    success = self._deploy_grafana_server(host)
-                else:
-                    logger.error(f"Unknown system type: {role}")
-                    success = False
-                
-                if not success:
-                    logger.error(f"Deployment failed for {role} on {host}")
-                    deployment_success = False
-                else:
-                    logger.info(f"Successfully deployed {role} on {host}")
-            
-            except Exception as e:
-                logger.error(f"Error deploying {role} to {host}: {e}")
-                deployment_success = False
-        
-        return deployment_success
 
     def _write_dry_run_output(self) -> None:
         """Write dry-run commands to output file."""
@@ -643,34 +596,41 @@ WantedBy=multi-user.target
             logger.error("BCM configuration verification failed")
             return False
         
-        # Get unique hosts and their roles
-        host_roles = self._get_host_roles()
-        
-        if not host_roles:
-            logger.warning("No hosts configured for deployment")
-            return True
-        
-        logger.info(f"Deploying to {len(host_roles)} unique hosts:")
-        for host, roles in host_roles.items():
-            logger.info(f"  {host}: {', '.join(roles)}")
-        
-        # Deploy to each unique host
+        # Deploy to each system type
         deployment_success = True
         
-        for host, roles in host_roles.items():
-            logger.info(f"Processing host: {host}")
+        for system_type, hosts in self.config['systems'].items():
+            if not hosts:
+                logger.warning(f"No hosts configured for {system_type}")
+                continue
             
-            try:
-                success = self._deploy_host(host, roles)
-                if not success:
-                    logger.error(f"Deployment failed for {host}")
+            for host in hosts:
+                logger.info(f"Deploying to {system_type}: {host}")
+                
+                try:
+                    if system_type == 'slurm_controller':
+                        success = self._deploy_slurm_controller(host)
+                    elif system_type == 'login_nodes':
+                        success = self._deploy_login_nodes(host)
+                    elif system_type == 'dgx_nodes':
+                        success = self._deploy_dgx_nodes(host)
+                    elif system_type == 'prometheus_server':
+                        success = self._deploy_prometheus_server(host)
+                    elif system_type == 'grafana_server':
+                        success = self._deploy_grafana_server(host)
+                    else:
+                        logger.error(f"Unknown system type: {system_type}")
+                        success = False
+                    
+                    if not success:
+                        logger.error(f"Deployment failed for {host}")
+                        deployment_success = False
+                    else:
+                        logger.info(f"Deployment completed successfully for {host}")
+                
+                except Exception as e:
+                    logger.error(f"Error deploying to {host}: {e}")
                     deployment_success = False
-                else:
-                    logger.info(f"Deployment completed successfully for {host}")
-            
-            except Exception as e:
-                logger.error(f"Error deploying to {host}: {e}")
-                deployment_success = False
         
         if self.dry_run:
             self._write_dry_run_output()
@@ -681,18 +641,18 @@ WantedBy=multi-user.target
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="BCM Jobstats Deployment Automation with Shared Host Support",
+        description="BCM Jobstats Deployment Automation",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
     # Dry run to see what commands would be executed
-    python deploy_jobstats_shared.py --dry-run
-    
-    # Deploy with lab configuration (shared hosts)
-    python deploy_jobstats_shared.py --config config-lab.json
+    python deploy_jobstats.py --dry-run
     
     # Deploy with custom configuration
-    python deploy_jobstats_shared.py --config my_config.json
+    python deploy_jobstats.py --config my_config.json
+    
+    # Deploy with default configuration
+    python deploy_jobstats.py
         """
     )
     
