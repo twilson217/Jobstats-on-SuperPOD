@@ -1,0 +1,6 @@
+BCM Jobstats Deployment - Dry Run Commands
+==================================================
+
+  1. which cmsh
+  2. cmsh -c 'wlm;get prolog;get epilog;get epilogslurmctld'
+  3. cmsh -c 'wlm;use slurm;show' | grep -E '(prolog|epilog)'

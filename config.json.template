@@ -1,0 +1,31 @@
+{
+  "cluster_name": "slurm",
+  "prometheus_server": "prometheus-server",
+  "grafana_server": "grafana-server",
+  "prometheus_port": 9090,
+  "grafana_port": 3000,
+  "node_exporter_port": 9100,
+  "cgroup_exporter_port": 9306,
+  "nvidia_gpu_exporter_port": 9445,
+  "prometheus_retention_days": 365,
+  "systems": {
+    "slurm_controller": [
+      "slurm-controller-01"
+    ],
+    "login_nodes": [
+      "login-node-01",
+      "login-node-02"
+    ],
+    "dgx_nodes": [
+      "dgx-node-01",
+      "dgx-node-02",
+      "dgx-node-03"
+    ],
+    "prometheus_server": [
+      "monitoring-server"
+    ],
+    "grafana_server": [
+      "monitoring-server"
+    ]
+  }
+}
