@@ -100,10 +100,24 @@ class BCMJobstatsDeployer:
             }
         }
         
-        if config_file and Path(config_file).exists():
-            with open(config_file, 'r') as f:
-                user_config = json.load(f)
-                default_config.update(user_config)
+        if config_file:
+            # If config_file doesn't contain a path, look in automation/configs/
+            if not os.path.isabs(config_file) and "/" not in config_file:
+                configs_dir = Path(__file__).parent / "configs"
+                config_file = str(configs_dir / config_file)
+            
+            if Path(config_file).exists():
+                with open(config_file, 'r') as f:
+                    user_config = json.load(f)
+                    default_config.update(user_config)
+            else:
+                logger.error(f"Configuration file {config_file} not found!")
+                logger.info("Available config files:")
+                configs_dir = Path(__file__).parent / "configs"
+                if configs_dir.exists():
+                    for f in configs_dir.glob("config*.json"):
+                        logger.info(f"  - {f.name}")
+                sys.exit(1)
         
         return default_config
 
@@ -785,7 +799,9 @@ WantedBy=multi-user.target
 
     def _write_dry_run_output(self) -> None:
         """Write dry-run commands to output file."""
-        output_file = "dry-run-output.txt"
+        logs_dir = Path(__file__).parent / "logs"
+        logs_dir.mkdir(exist_ok=True)
+        output_file = logs_dir / "dry-run-output.txt"
         with open(output_file, 'w') as f:
             f.write("BCM Jobstats Deployment - Dry Run Commands\n")
             f.write("=" * 50 + "\n\n")
@@ -879,13 +895,13 @@ def main():
         epilog="""
 Examples:
     # Dry run to see what commands would be executed
-    python deploy_jobstats_shared.py --dry-run
+    python deploy_jobstats.py --dry-run
     
     # Deploy with lab configuration (shared hosts)
-    python deploy_jobstats_shared.py --config config-lab.json
+    python deploy_jobstats.py --config config-shared-hosts.json
     
     # Deploy with custom configuration
-    python deploy_jobstats_shared.py --config my_config.json
+    python deploy_jobstats.py --config my_config.json
         """
     )
     
@@ -912,7 +928,7 @@ Examples:
     if success:
         logger.info("Deployment completed successfully!")
         if args.dry_run:
-            logger.info("Check dry-run-output.txt for the list of commands that would be executed.")
+            logger.info("Check automation/logs/dry-run-output.txt for the list of commands that would be executed.")
         sys.exit(0)
     else:
         logger.error("Deployment failed!")

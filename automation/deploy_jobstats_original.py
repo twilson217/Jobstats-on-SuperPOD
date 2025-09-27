@@ -575,7 +575,9 @@ WantedBy=multi-user.target
 
     def _write_dry_run_output(self) -> None:
         """Write dry-run commands to output file."""
-        output_file = "dry-run-output.txt"
+        logs_dir = Path(__file__).parent / "logs"
+        logs_dir.mkdir(exist_ok=True)
+        output_file = logs_dir / "dry-run-output.txt"
         with open(output_file, 'w') as f:
             f.write("BCM Jobstats Deployment - Dry Run Commands\n")
             f.write("=" * 50 + "\n\n")
@@ -679,7 +681,7 @@ Examples:
     if success:
         logger.info("Deployment completed successfully!")
         if args.dry_run:
-            logger.info("Check dry-run-output.txt for the list of commands that would be executed.")
+            logger.info("Check automation/logs/dry-run-output.txt for the list of commands that would be executed.")
         sys.exit(0)
     else:
         logger.error("Deployment failed!")

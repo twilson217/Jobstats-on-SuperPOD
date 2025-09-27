@@ -38,11 +38,9 @@ The jobstats platform consists of several components distributed across differen
 **Prometheus Server:**
 - Prometheus time-series database
 - Scrapes metrics from all DGX nodes
-- May be co-located with Grafana server
 
 **Grafana Server:**
 - Web interface for visualization and dashboards
-- May be co-located with Prometheus server
 
 ### Component Distribution
 
@@ -123,47 +121,11 @@ ls -la /opt/jobstats-deployment/node_exporter/
 - **DGX Compute Nodes**: Needs all exporter repositories for building binaries
 - **Prometheus Server**: No repositories needed (uses pre-built binaries)
 
-**Options for making repositories available:**
-1. **Clone on each system**: Run the git clone commands on each system that needs the repositories
-2. **Shared storage**: Clone to shared storage (e.g., `/cm/shared/`) accessible by all nodes
-3. **Copy from head node**: Clone on head node, then copy to other systems as needed
+**Repository Distribution**: Clone repositories on each system that needs them.
 
-**Recommended approach**: Clone repositories on each system that needs them, as this ensures each system has the latest code and doesn't depend on shared storage availability.
+## Deployment Process
 
-## Deployment Options
-
-This guide provides two deployment approaches:
-
-### Option 1: Automated Deployment (Recommended)
-Use the Python automation script for streamlined deployment:
-
-```bash
-# Clone the deployment repository
-git clone <repository-url>
-cd jobstats-on-superpod
-
-# Configure your environment
-cp config.json.template config.json
-# Edit config.json with your system hostnames
-
-# Or use pre-configured examples:
-# cp config-lab.json config.json          # For lab environments
-# cp config-existing-monitoring.json config.json  # For existing monitoring
-
-# Run automated deployment
-python3 deploy_jobstats.py --config config.json
-```
-
-**Benefits:**
-- Automated dependency installation
-- BCM configuration verification
-- Shared host support
-- Existing monitoring infrastructure support
-- BCM imaging guidance
-- Dry-run mode for testing
-
-### Option 2: Manual Step-by-Step Deployment
-Follow the detailed manual instructions below for complete control over each step.
+This guide provides step-by-step manual deployment instructions for complete control over each step.
 
 ## Production Deployment by System
 
@@ -218,6 +180,9 @@ cp /opt/jobstats-deployment/jobstats/jobstats/slurm/epilog.d/gpustats_helper.sh 
 chmod +x /cm/shared/apps/slurm/var/cm/prolog-jobstats.sh
 chmod +x /cm/shared/apps/slurm/var/cm/epilog-jobstats.sh
 
+# Create GPU ownership tracking directory
+mkdir -p /run/gpustat
+
 # Create symlinks in BCM prolog/epilog directories (following Enroot pattern)
 # Use 60- prefix to run after existing BCM scripts (like 50-prolog-enroot.sh)
 ln -sf /cm/shared/apps/slurm/var/cm/prolog-jobstats.sh /cm/local/apps/slurm/var/prologs/60-prolog-jobstats.sh
@@ -227,6 +192,9 @@ ln -sf /cm/shared/apps/slurm/var/cm/epilog-jobstats.sh /cm/local/apps/slurm/var/
 cp /opt/jobstats-deployment/jobstats/jobstats/slurm/slurmctldepilog.sh /usr/local/sbin/
 chmod +x /usr/local/sbin/slurmctldepilog.sh
 ```
+
+**Job Summary Storage:**
+The `slurmctldepilog.sh` script generates job summaries at completion and stores them in the Slurm database's `AdminComment` field. This provides long-term storage of job efficiency data that can be retrieved by the `jobstats` command even after detailed Prometheus data has been purged.
 
 **Step 4: Verify Script Integration**
 ```bash
@@ -245,9 +213,9 @@ ls -la /cm/shared/apps/slurm/var/cm/epilog-jobstats.sh
 
 #### 2.2 Configure Slurm via BCM
 
-**BCM Configuration Method**: BCM already points to the generic prolog/epilog scripts that automatically call all scripts in the prologs/epilogs directories. We only need to configure the slurmctld epilog.
+**BCM Configuration Method**: BCM already points to the generic prolog/epilog scripts that automatically call all scripts in the prologs/epilogs directories. We need to configure the slurmctld epilog and ensure proper cgroup configuration.
 
-**Option A: Using cmsh (Command Line)**
+**Step 1: Configure Slurmctld Epilog**
 ```bash
 # Access BCM cluster management shell
 cmsh
@@ -260,16 +228,25 @@ cmsh
 [basecm10->wlm[slurm]]% get prolog
 [basecm10->wlm[slurm]]% get epilog
 
-# Only configure the slurmctld epilog for job summary
+# Configure the slurmctld epilog for job summary
 [basecm10->wlm[slurm]]% set epilogslurmctld /usr/local/sbin/slurmctldepilog.sh
 [basecm10->wlm[slurm]]% commit
 ```
 
-**Option B: Using Base View GUI**
-1. Open Base View web interface
-2. Navigate to Workload Management → Slurm
-3. Configure only the EpilogSlurmctld path: `/usr/local/sbin/slurmctldepilog.sh`
-4. Apply changes
+**Step 2: Verify Cgroup Configuration**
+BCM automatically configures cgroup support, but verify these critical settings are present in `/cm/shared/apps/slurm/var/etc/<cluster_name>/slurm.conf`:
+
+```bash
+# Check if cgroup configuration is present
+grep -E "(JobAcctGatherType|ProctrackType|TaskPlugin)" /cm/shared/apps/slurm/var/etc/<cluster_name>/slurm.conf
+```
+
+**Required cgroup settings for jobstats:**
+- `JobAcctGatherType=jobacct_gather/cgroup` (for CPU job accounting)
+- `ProctrackType=proctrack/cgroup` (for process tracking)
+- `TaskPlugin=affinity,cgroup` (for task affinity and cgroup management)
+
+**Note**: If these settings are missing from the AUTOGENERATED section, they must be added via BCM. If they're in the manual section (before AUTOGENERATED), they can be edited directly in the config file.
 
 **Note**: The generic prolog/epilog scripts (`/cm/local/apps/cmd/scripts/prolog` and `/cm/local/apps/cmd/scripts/epilog`) automatically discover and execute all scripts in `/cm/local/apps/slurm/var/prologs/` and `/cm/local/apps/slurm/var/epilogs/` respectively, so no changes are needed to those settings.
 
@@ -303,13 +280,44 @@ chmod +x /usr/local/bin/jobstats
 
 #### 3.3 Configure Jobstats
 
-Update `/usr/local/bin/config.py` to point to your Prometheus server:
+Update `/usr/local/bin/config.py` with the following essential settings:
 
 ```python
 # prometheus server address, port, and retention period
 PROM_SERVER = "http://prometheus-server:9090"  # Replace with actual hostname/IP
 PROM_RETENTION_DAYS = 365
+
+# number of seconds between measurements (should match Prometheus scrape_interval)
+SAMPLING_PERIOD = 30
+
+# threshold values for efficiency reporting
+GPU_UTIL_RED   = 15  # percentage - jobs below this show red warning
+GPU_UTIL_BLACK = 25  # percentage - jobs below this show black warning
+CPU_UTIL_RED   = 65  # percentage - jobs below this show red warning
+CPU_UTIL_BLACK = 80  # percentage - jobs below this show black warning
+TIME_EFFICIENCY_RED   = 40  # percentage
+TIME_EFFICIENCY_BLACK = 70  # percentage
+
+# minimum memory usage threshold for warnings
+MIN_MEMORY_USAGE = 70  # percentage
+
+# minimum runtime to show efficiency notes
+MIN_RUNTIME_SECONDS = 10 * SAMPLING_PERIOD  # seconds
+
+# default CPU memory per core in bytes for your cluster
+DEFAULT_MEM_PER_CORE = {"your-cluster": 4_294_967_296}  # 4GB per core example
+
+# number of CPU-cores per node for your cluster
+CORES_PER_NODE = {"your-cluster": 40}  # example: 40 cores per node
+
+# custom job notes (optional)
+NOTES = []
 ```
+
+**Important Configuration Notes:**
+- `SAMPLING_PERIOD` must match the `scrape_interval` in your Prometheus configuration
+- `DEFAULT_MEM_PER_CORE` and `CORES_PER_NODE` should be set to your actual cluster values
+- Custom notes can be added to provide guidance to users about efficiency issues
 
 ### 4. DGX Compute Nodes
 
@@ -372,6 +380,13 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 ```
+
+**Important cgroup_exporter options:**
+- `--config.paths /slurm`: Must match the path used by Slurm under the top cgroup directory (usually `/sys/fs/cgroup/memory/slurm`)
+- `--collect.fullslurm`: Collects all step and task data, not just job totals (required for detailed job analysis)
+
+**GPU Ownership Tracking:**
+The prolog/epilog scripts create files in `/run/gpustat/` to track which GPU is assigned to which job. These files are named after GPU ordinal numbers (0, 1, etc.) and contain the jobid and UID of the user. The NVIDIA GPU exporter reads these files to associate GPU metrics with specific jobs.
 
 **Node Exporter Service:** `/etc/systemd/system/node_exporter.service`
 ```ini
@@ -481,7 +496,16 @@ scrape_configs:
       - source_labels: [__name__]
         regex: '^go_.*'
         action: drop
+      - source_labels: [__name__]
+        regex: '^slurm_.*'
+        target_label: 'cluster'
+        replacement: 'dgx'
 ```
+
+**Important Prometheus Configuration Notes:**
+- `scrape_interval: 30s` must match `SAMPLING_PERIOD = 30` in the jobstats config.py
+- The `cluster` label is added to slurm metrics for multi-cluster environments
+- The `^go_.*` regex drops Go runtime metrics to reduce storage requirements
 
 #### 5.4 Create Systemd Service
 
@@ -572,7 +596,6 @@ systemctl start grafana-server
 
 **Prometheus Server must be able to reach:**
 - All DGX nodes on ports 9100, 9306, and 9445
-- Grafana server on port 3000 (if co-located, localhost)
 
 **Login Nodes must be able to reach:**
 - Prometheus server on port 9090
@@ -701,12 +724,7 @@ jobstats --help
 | prometheus | 9090 | Metrics database | Prometheus server |
 | grafana | 3000 | Web dashboard | Grafana server |
 
-## Lab vs Production Differences
-
-**Lab Environment (Single System):**
-- All components installed on one DGX system (dgx-01)
-- All services use localhost for communication
-- Simplified deployment for testing and development
+## Production Deployment
 
 **Production Environment (Distributed Systems):**
 - Components distributed across multiple systems
@@ -724,7 +742,7 @@ jobstats --help
   - `cgroup.conf` - Cgroup configuration for resource management
   - `gres.conf` - GPU resource configuration
   - `topology.conf` - Network topology configuration
-- **Configuration Changes**: Must be made through BCM tools (`cmsh` or Base View GUI)
+- **Configuration Changes**: Must be made through BCM tools (`cmsh`)
 - **Prolog/Epilog Management**: BCM automatically manages script execution and `slurm.conf` parameters
 
 ### BCM Prolog/Epilog Script System
@@ -868,18 +886,7 @@ For BCM-managed systems, the recommended approach is to deploy jobstats on one r
 ### Imaging Process
 
 **Step 1: Deploy on Representative Nodes**
-Deploy jobstats on one node of each type (DGX, Slurm controller, login node):
-
-```bash
-# Deploy on one DGX node
-python3 deploy_jobstats.py --config config.json
-
-# Deploy on one Slurm controller  
-python3 deploy_jobstats.py --config config.json
-
-# Deploy on one login node
-python3 deploy_jobstats.py --config config.json
-```
+Deploy jobstats on one node of each type (DGX, Slurm controller, login node) following the manual deployment steps in this guide.
 
 **Step 2: Capture Images**
 After successful deployment, capture the image for each node type:
@@ -911,30 +918,11 @@ BCM will automatically deploy the captured images to all nodes of the same type.
 
 ## Shared Host Considerations
 
-For environments where systems share roles (e.g., same node for Slurm controller and login, commonly called "slogin" nodes):
-
-### Shared Host Configuration
-```json
-{
-  "systems": {
-    "slurm_controller": ["slogin-01"],
-    "login_nodes": ["slogin-01"],
-    "dgx_nodes": ["dgx-node-01", "dgx-node-02"],
-    "prometheus_server": ["monitoring-01"],
-    "grafana_server": ["monitoring-01"]
-  }
-}
-```
-
-The deployment script automatically handles shared hosts by:
-- Detecting multiple roles on the same host
-- Installing all required components for all roles
-- Optimizing dependency installation to avoid duplicates
-- Providing appropriate imaging guidance for each role
+For environments where systems share roles (e.g., same node for Slurm controller and login), install all required components for all roles on the same system, following the deployment steps for each role type.
 
 ## BCM Category-Based Service Management
 
-For customers with mixed DGX environments (Slurm and Kubernetes categories), jobstats services can be tied to the Slurm category so they automatically start/stop when nodes switch between categories. This ensures:
+Jobstats services are tied to the Slurm category so they automatically start/stop when nodes switch between categories. This ensures:
 
 - **Same software image** used for all DGX nodes
 - **Automatic service management** based on category assignment
@@ -1004,8 +992,7 @@ cmsh -c "device; use dgx-node-01; set category kubernetes-category; commit"
 
 #### Initial Setup
 ```bash
-# 1. Deploy jobstats on representative DGX node
-python3 deploy_jobstats.py --config config.json
+# 1. Deploy jobstats on representative DGX node following manual deployment steps
 
 # 2. Add services to Slurm category
 cmsh -c "category; use slurm-category; services; add cgroup_exporter; set autostart yes; set monitored yes; commit"
@@ -1057,61 +1044,14 @@ cmsh -c "device; use dgx-node-01; services; status"
 
 ## Existing Monitoring Infrastructure
 
-For environments with existing Prometheus and/or Grafana installations:
-
-### Configuration Options
-```json
-{
-  "use_existing_prometheus": true,
-  "use_existing_grafana": true,
-  "prometheus_server": "existing-prometheus.company.com",
-  "grafana_server": "existing-grafana.company.com",
-  "systems": {
-    "prometheus_server": [],
-    "grafana_server": []
-  }
-}
-```
-
-### Manual Configuration Required
-
-**For Existing Prometheus:**
-Add this job to your existing `prometheus.yml`:
-```yaml
-  - job_name: 'jobstats-dgx-nodes'
-    scrape_interval: 30s
-    scrape_timeout: 30s
-    static_configs:
-      - targets: 
-        - 'dgx-node-01:9100'  # node_exporter
-        - 'dgx-node-01:9306'  # cgroup_exporter
-        - 'dgx-node-01:9445'  # nvidia_gpu_exporter
-    metric_relabel_configs:
-      - source_labels: [__name__]
-        regex: '^go_.*'
-        action: drop
-      - source_labels: [__name__]
-        regex: '^slurm_.*'
-        target_label: 'cluster'
-        replacement: 'slurm'
-```
-
-Then reload: `curl -X POST http://localhost:9090/-/reload`
-
-**For Existing Grafana:**
-1. Add Prometheus data source: `http://your-prometheus-server:9090`
-2. Import dashboards: ID 1860 (Node Exporter), ID 1443 (NVIDIA GPU)
-3. Create custom dashboards using jobstats metrics
+For environments with existing Prometheus and/or Grafana installations, skip the Prometheus and Grafana installation steps and configure your existing systems as described in the configuration sections.
 
 ## Next Steps
 
-1. **Choose Deployment Method**: 
-   - **Automated**: Use `python3 deploy_jobstats.py --config config.json`
-   - **Manual**: Follow step-by-step instructions in this guide
+1. **Follow Manual Deployment**: Use the step-by-step instructions in this guide
 2. **Configure for Your Environment**:
-   - **Lab setup**: Use shared host configuration
-   - **Existing monitoring**: Use existing infrastructure configuration
-   - **Production**: Use standard multi-node configuration
+   - **Existing monitoring**: Skip Prometheus/Grafana installation steps and configure existing systems
+   - **Standard deployment**: Follow all installation steps
 3. **BCM Imaging** (if applicable):
    - Deploy on representative nodes
    - Capture images with `grabimage -w`
