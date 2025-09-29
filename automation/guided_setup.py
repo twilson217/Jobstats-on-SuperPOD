@@ -18,6 +18,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -61,8 +62,8 @@ class GuidedJobstatsSetup:
         # Repository URLs
         self.repositories = {
             'jobstats': 'https://github.com/PrincetonUniversity/jobstats.git',
-            'cgroup_exporter': 'https://github.com/PrincetonUniversity/cgroup_exporter.git',
-            'nvidia_gpu_prometheus_exporter': 'https://github.com/PrincetonUniversity/nvidia_gpu_prometheus_exporter.git',
+            'cgroup_exporter': 'https://github.com/plazonic/cgroup_exporter.git',
+            'nvidia_gpu_prometheus_exporter': 'https://github.com/plazonic/nvidia_gpu_prometheus_exporter.git',
             'node_exporter': 'https://github.com/prometheus/node_exporter.git'
         }
         
@@ -75,13 +76,13 @@ class GuidedJobstatsSetup:
                 'completed': False
             },
             {
-                'id': 'cgroups',
-                'title': 'CPU Job Statistics (Cgroups)',
-                'description': 'Configure Slurm for cgroup-based job accounting',
+                'id': 'cpu_job_stats',
+                'title': 'CPU Job Statistics',
+                'description': 'Configure Slurm for cgroup-based job accounting and install cgroup exporter',
                 'completed': False
             },
             {
-                'id': 'gpu_scripts',
+                'id': 'gpu_job_stats',
                 'title': 'GPU Job Statistics',
                 'description': 'Setup GPU monitoring and prolog/epilog scripts',
                 'completed': False
@@ -93,8 +94,8 @@ class GuidedJobstatsSetup:
                 'completed': False
             },
             {
-                'id': 'summaries',
-                'title': 'Generating Job Summaries',
+                'id': 'job_summaries',
+                'title': 'Job Summaries',
                 'description': 'Setup slurmctld epilog for job summary retention',
                 'completed': False
             },
@@ -240,11 +241,26 @@ class GuidedJobstatsSetup:
     def _confirm_execution(self, commands: List[Dict]) -> bool:
         """Ask user to confirm command execution."""
         print(f"\n{Colors.BOLD}{Colors.YELLOW}Ready to execute {len(commands)} command(s).{Colors.END}")
-        response = input(f"{Colors.YELLOW}Do you want to proceed? (y/N): {Colors.END}").strip().lower()
-        return response in ['y', 'yes']
+        return self._safe_input(f"{Colors.YELLOW}Do you want to proceed? (y/N): {Colors.END}")
+
+    def _safe_input(self, prompt: str) -> bool:
+        """Safely handle input, returning True if user confirms or in non-interactive mode."""
+        try:
+            response = input(prompt).strip().lower()
+            return response in ['y', 'yes']
+        except EOFError:
+            print(f"\n{Colors.BLUE}[NON-INTERACTIVE] Auto-proceeding...{Colors.END}")
+            return True
+
+    def _safe_continue(self, message: str = "Press Enter to continue to the next section..."):
+        """Safely handle continue prompts."""
+        try:
+            input(f"\n{Colors.YELLOW}{message}{Colors.END}")
+        except EOFError:
+            print(f"\n{Colors.BLUE}[NON-INTERACTIVE] Continuing to next section...{Colors.END}")
 
     def _run_command(self, command: str, host: Optional[str] = None, 
-                    capture_output: bool = False) -> Tuple[int, str, str]:
+                    capture_output: bool = True) -> Tuple[int, str, str]:
         """Run a command locally or on a remote host."""
         try:
             if host:
@@ -257,7 +273,7 @@ class GuidedJobstatsSetup:
                 result = subprocess.run(command, shell=True, capture_output=capture_output,
                                       text=True, check=False)
             
-            return result.returncode, result.stdout, result.stderr
+            return result.returncode, result.stdout or "", result.stderr or ""
         except Exception as e:
             logger.error(f"Error executing command '{command}' on {host or 'localhost'}: {e}")
             return 1, "", str(e)
@@ -276,13 +292,16 @@ class GuidedJobstatsSetup:
         commands_by_host = {}
         for cmd in commands:
             host = cmd.get('host', 'localhost')
+            if host is None:
+                host = 'localhost'  # Convert None to 'localhost' for display
             if host not in commands_by_host:
                 commands_by_host[host] = []
             commands_by_host[host].append(cmd)
         
         # Add commands to document grouped by host
         for host, host_commands in commands_by_host.items():
-            self._add_to_document(f"#### Host: {host}")
+            display_host = host if host != 'localhost' else 'BCM Headnode'
+            self._add_to_document(f"#### Host: {display_host}")
             self._add_to_document("")
             self._add_to_document("```bash")
             for i, cmd in enumerate(host_commands, 1):
@@ -290,7 +309,10 @@ class GuidedJobstatsSetup:
                 command = cmd['command']
                 if description:
                     # Remove hostname from description since it's already shown above
-                    clean_description = description.replace(f" on {host}", "").replace(f" on {host.split('.')[0]}", "")
+                    if host and host != 'localhost':
+                        clean_description = description.replace(f" on {host}", "").replace(f" on {host.split('.')[0]}", "")
+                    else:
+                        clean_description = description
                     self._add_to_document(f"# Step {i} - {clean_description}")
                 else:
                     self._add_to_document(f"# Step {i}")
@@ -325,6 +347,8 @@ class GuidedJobstatsSetup:
             print(f"\n{Colors.BLUE}Executing: {description or command}{Colors.END}")
             if host:
                 print(f"{Colors.CYAN}Host: {host}{Colors.END}")
+            else:
+                print(f"{Colors.CYAN}Host: BCM Headnode{Colors.END}")
             
             returncode, stdout, stderr = self._run_command(command, host)
             
@@ -386,39 +410,41 @@ class GuidedJobstatsSetup:
         print(f"• Princeton University: https://princetonuniversity.github.io/jobstats/setup/overview/")
         
         if not self.dry_run:
-            input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+            self._safe_continue()
         else:
             print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
         
         return True
 
-    def section_cgroups(self):
-        """Section 2: CPU Job Statistics (Cgroups)"""
+    def section_cpu_job_stats(self):
+        """Section 2: CPU Job Statistics"""
         self._print_header(
-            "2. CPU Job Statistics (Cgroups)",
+            "2. CPU Job Statistics",
             "Configure Slurm for cgroup-based job accounting and install cgroup exporter"
         )
         
         # Add to document
-        self._add_to_document("## 2. CPU Job Statistics (Cgroups)")
+        self._add_to_document("## 2. CPU Job Statistics")
         self._add_to_document("")
         self._add_to_document("### Description")
         self._add_to_document("")
-        self._add_to_document("This section configures Slurm to use cgroup-based job accounting")
-        self._add_to_document("instead of Linux process accounting for more accurate resource tracking.")
-        self._add_to_document("It also installs the cgroup_exporter to collect cgroup metrics.")
+        self._add_to_document("Configure Slurm for cgroup-based job accounting and install cgroup exporter")
+        self._add_to_document("")
+        self._add_to_document("This section configures Slurm settings for cgroup accounting and installs")
+        self._add_to_document("the cgroup_exporter for collecting cgroup metrics.")
         self._add_to_document("")
         self._add_to_document("### What we'll do")
         self._add_to_document("")
-        self._add_to_document("- 2a. Install Slurm prolog/epilog scripts (BCM method)")
+        self._add_to_document("- 2a. Configure slurm.conf settings (outside autogenerated section)")
         self._add_to_document("- 2b. Deploy cgroup_exporter")
         self._add_to_document("")
         
-        print(f"{Colors.BLUE}This section installs Slurm prolog/epilog scripts using BCM's script discovery system{Colors.END}")
-        print(f"{Colors.BLUE}and installs the cgroup_exporter for collecting cgroup metrics.{Colors.END}")
+        print(f"{Colors.BLUE}Configure Slurm for cgroup-based job accounting and install cgroup exporter{Colors.END}")
+        print(f"{Colors.BLUE}This section configures Slurm settings for cgroup accounting and installs{Colors.END}")
+        print(f"{Colors.BLUE}the cgroup_exporter for collecting cgroup metrics.{Colors.END}")
         
         print(f"\n{Colors.BOLD}{Colors.WHITE}What we'll do:{Colors.END}")
-        print(f"• 2a. Install Slurm prolog/epilog scripts (BCM method)")
+        print(f"• 2a. Configure slurm.conf settings (outside autogenerated section)")
         print(f"• 2b. Deploy cgroup_exporter")
         
         # Get slurm controller host
@@ -428,104 +454,81 @@ class GuidedJobstatsSetup:
         cluster_name = self.config.get('cluster_name', 'slurm')
         slurm_conf_path = f"/cm/shared/apps/slurm/var/etc/{cluster_name}/slurm.conf"
         
-        # Subsection 2a: Install Slurm prolog/epilog scripts (BCM method)
-        print(f"\n{Colors.BOLD}{Colors.CYAN}2a. Install Slurm prolog/epilog scripts (BCM method){Colors.END}")
-        self._add_to_document("### 2a. Install Slurm prolog/epilog scripts (BCM method)")
+        # Subsection 2a: Configure slurm.conf settings
+        print(f"\n{Colors.BOLD}{Colors.CYAN}2a. Configure slurm.conf settings (outside autogenerated section){Colors.END}")
+        self._add_to_document("### 2a. Configure slurm.conf settings (outside autogenerated section)")
         self._add_to_document("")
-        self._add_to_document("#### BCM Script Discovery System")
+        self._add_to_document("#### Slurm Configuration for Cgroups")
         self._add_to_document("")
-        self._add_to_document("BCM uses a generic prolog/epilog system that automatically calls all scripts")
-        self._add_to_document("in specific directories. We'll install jobstats scripts using BCM's pattern:")
-        self._add_to_document("")
-        self._add_to_document("- **Script locations:** `/cm/local/apps/slurm/var/prologs/` and `/cm/local/apps/slurm/var/epilogs/`")
-        self._add_to_document("- **Shared storage:** `/cm/shared/apps/slurm/var/cm/` (accessible to all nodes)")
-        self._add_to_document("- **Symlink pattern:** Local symlinks point to shared storage scripts")
-        self._add_to_document("- **Naming convention:** Use `60-` prefix to run after existing BCM scripts")
-        self._add_to_document("")
-        self._add_to_document("#### BCM Configuration")
-        self._add_to_document("")
-        self._add_to_document("BCM automatically manages prolog/epilog settings in slurm.conf.")
-        self._add_to_document("We only need to configure the slurmctld epilog for job summaries.")
+        self._add_to_document("We need to configure Slurm to use cgroup-based job accounting.")
+        self._add_to_document("These settings must be placed outside the AUTOGENERATED SECTION.")
         self._add_to_document("")
         
-        # Step 1: Install prolog/epilog scripts using BCM pattern
-        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 1: Installing prolog/epilog scripts using BCM pattern{Colors.END}")
+        # Step 1: Configure slurm.conf for cgroup accounting
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 1: Configuring slurm.conf for cgroup accounting{Colors.END}")
         
-        install_commands = [
+        slurm_conf_commands = [
             {
                 'host': slurm_controller,
-                'command': 'mkdir -p /cm/shared/apps/slurm/var/cm',
-                'description': 'Create shared storage directory for jobstats scripts'
+                'command': f'cp {slurm_conf_path} {slurm_conf_path}.backup',
+                'description': 'Backup slurm.conf before modification'
             },
             {
                 'host': slurm_controller,
-                'command': 'cp /opt/jobstats-deployment/jobstats/jobstats/slurm/prolog.d/gpustats_helper.sh /cm/shared/apps/slurm/var/cm/prolog-jobstats.sh',
-                'description': 'Copy prolog script to shared storage'
-            },
-            {
-                'host': slurm_controller,
-                'command': 'chmod +x /cm/shared/apps/slurm/var/cm/prolog-jobstats.sh',
-                'description': 'Make prolog script executable'
-            },
-            {
-                'host': slurm_controller,
-                'command': 'cp /opt/jobstats-deployment/jobstats/jobstats/slurm/epilog.d/gpustats_helper.sh /cm/shared/apps/slurm/var/cm/epilog-jobstats.sh',
-                'description': 'Copy epilog script to shared storage'
-            },
-            {
-                'host': slurm_controller,
-                'command': 'chmod +x /cm/shared/apps/slurm/var/cm/epilog-jobstats.sh',
-                'description': 'Make epilog script executable'
-            },
-            {
-                'host': slurm_controller,
-                'command': 'mkdir -p /cm/local/apps/slurm/var/prologs',
-                'description': 'Create local prolog directory'
-            },
-            {
-                'host': slurm_controller,
-                'command': 'mkdir -p /cm/local/apps/slurm/var/epilogs',
-                'description': 'Create local epilog directory'
-            },
-            {
-                'host': slurm_controller,
-                'command': 'ln -sf /cm/shared/apps/slurm/var/cm/prolog-jobstats.sh /cm/local/apps/slurm/var/prologs/60-prolog-jobstats.sh',
-                'description': 'Create prolog symlink (60- prefix for execution order)'
-            },
-            {
-                'host': slurm_controller,
-                'command': 'ln -sf /cm/shared/apps/slurm/var/cm/epilog-jobstats.sh /cm/local/apps/slurm/var/epilogs/60-epilog-jobstats.sh',
-                'description': 'Create epilog symlink (60- prefix for execution order)'
-            },
-            {
-                'host': slurm_controller,
-                'command': 'cp /opt/jobstats-deployment/jobstats/jobstats/slurm/slurmctldepilog.sh /usr/local/sbin/',
-                'description': 'Copy slurmctld epilog script for job summaries'
-            },
-            {
-                'host': slurm_controller,
-                'command': 'chmod +x /usr/local/sbin/slurmctldepilog.sh',
-                'description': 'Make slurmctld epilog script executable'
+                'command': f'''cat > /tmp/update_slurm_conf.py << 'EOF'
+import re
+import sys
+
+# Read the file
+with open('{slurm_conf_path}', 'r') as f:
+    content = f.read()
+
+# Settings to update
+settings = {{
+    'JobAcctGatherType': 'jobacct_gather/cgroup',
+    'ProctrackType': 'proctrack/cgroup', 
+    'TaskPlugin': 'affinity,cgroup'
+}}
+
+# Find the AUTOGENERATED SECTION
+autogen_match = re.search(r'^# BEGIN AUTOGENERATED SECTION.*$', content, re.MULTILINE)
+if not autogen_match:
+    print('ERROR: AUTOGENERATED SECTION not found')
+    sys.exit(1)
+
+autogen_pos = autogen_match.start()
+
+# Process each setting
+for key, value in settings.items():
+    # Look for existing setting
+    pattern = rf'^{{re.escape(key)}}\\s*=.*$'
+    match = re.search(pattern, content, re.MULTILINE)
+    
+    if match:
+        # Replace existing setting
+        old_line = match.group(0)
+        new_line = f'{{key}}={{value}}'
+        content = content.replace(old_line, new_line)
+        print(f'Updated {{key}}={{value}}')
+    else:
+        # Insert new setting before AUTOGENERATED SECTION
+        new_line = f'{{key}}={{value}}'
+        content = content[:autogen_pos] + new_line + '\\n' + content[autogen_pos:]
+        print(f'Added {{key}}={{value}}')
+
+# Write the updated file
+with open('{slurm_conf_path}', 'w') as f:
+    f.write(content)
+
+print('slurm.conf updated successfully')
+EOF
+python3 /tmp/update_slurm_conf.py''',
+                'description': 'Update slurm.conf with cgroup settings'
             }
         ]
         
-        if not self._execute_commands(install_commands, "BCM Script Installation"):
-            print(f"\n{Colors.RED}✗ Failed to install BCM scripts{Colors.END}")
-            return False
-        
-        # Step 2: Configure BCM epilogslurmctld setting
-        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 2: Configuring BCM epilogslurmctld setting{Colors.END}")
-        
-        bcm_commands = [
-            {
-                'host': slurm_controller,
-                'command': 'cmsh -c "wlm;use slurm;set epilogslurmctld /usr/local/sbin/slurmctldepilog.sh;commit"',
-                'description': 'Configure BCM epilogslurmctld setting'
-            }
-        ]
-        
-        if not self._execute_commands(bcm_commands, "BCM Configuration"):
-            print(f"\n{Colors.RED}✗ Failed to configure BCM settings{Colors.END}")
+        if not self._execute_commands(slurm_conf_commands, "Slurm Configuration"):
+            print(f"\n{Colors.RED}✗ Failed to configure slurm.conf{Colors.END}")
             return False
         
         # Add BCM configuration info to document
@@ -546,8 +549,8 @@ class GuidedJobstatsSetup:
         self._add_to_document("### 2b. Deploy cgroup_exporter")
         self._add_to_document("")
         
-        # Step 3: Install cgroup_exporter on compute nodes
-        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 1: Installing cgroup_exporter on compute nodes{Colors.END}")
+        # Step 2: Install cgroup_exporter on compute nodes
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 2: Installing cgroup_exporter on compute nodes{Colors.END}")
         
         cgroup_commands = []
         for dgx_node in self.config['systems']['dgx_nodes']:
@@ -559,13 +562,23 @@ class GuidedJobstatsSetup:
                 },
                 {
                     'host': dgx_node,
-                    'command': f'cd {self.working_dir} && git clone {self.repositories["cgroup_exporter"]}',
-                    'description': f'Clone cgroup_exporter on {dgx_node}'
+                    'command': 'apt update && apt install -y golang-go',
+                    'description': f'Install Go compiler on {dgx_node}'
+                },
+            {
+                'host': dgx_node,
+                'command': f'cd {self.working_dir} && if [ -d cgroup_exporter ]; then cd cgroup_exporter && git pull; else git clone {self.repositories["cgroup_exporter"]}; fi',
+                'description': f'Clone or update cgroup_exporter on {dgx_node}'
+            },
+                {
+                    'host': dgx_node,
+                    'command': f'cd {self.working_dir}/cgroup_exporter && go build',
+                    'description': f'Build cgroup_exporter on {dgx_node}'
                 },
                 {
                     'host': dgx_node,
-                    'command': f'cd {self.working_dir}/cgroup_exporter && make build',
-                    'description': f'Build cgroup_exporter on {dgx_node}'
+                    'command': 'systemctl stop cgroup_exporter || true',
+                    'description': f'Stop cgroup_exporter service on {dgx_node} (if running)'
                 },
                 {
                     'host': dgx_node,
@@ -588,7 +601,7 @@ After=network.target
 [Service]
 Type=simple
 User=prometheus
-ExecStart=/usr/local/bin/cgroup_exporter --port={self.config['cgroup_exporter_port']}
+ExecStart=/usr/local/bin/cgroup_exporter --web.listen-address=:{self.config['cgroup_exporter_port']} --config.paths=/user.slice,/system.slice,/slurm
 Restart=always
 RestartSec=5
 
@@ -601,6 +614,11 @@ EOF''',
                     'host': dgx_node,
                     'command': 'systemctl daemon-reload && systemctl enable cgroup_exporter && systemctl start cgroup_exporter',
                     'description': f'Start cgroup_exporter service on {dgx_node}'
+                },
+                {
+                    'host': dgx_node,
+                    'command': 'setcap cap_sys_ptrace=eip /usr/local/bin/cgroup_exporter',
+                    'description': f'Set capabilities for cgroup_exporter to read procfs on {dgx_node}'
                 }
             ])
         
@@ -609,7 +627,7 @@ EOF''',
             return False
         
         # Step 2: Verify cgroup_exporter installation
-        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 2: Verifying cgroup_exporter installation{Colors.END}")
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 3: Verifying cgroup_exporter installation{Colors.END}")
         
         verify_commands = []
         for dgx_node in self.config['systems']['dgx_nodes']:
@@ -638,6 +656,10 @@ EOF''',
         print(f"\n{Colors.BOLD}{Colors.GREEN}✓ Cgroup configuration and exporter installation completed{Colors.END}")
         print(f"{Colors.BOLD}{Colors.GREEN}✓ Cgroup_exporter verification completed{Colors.END}")
         
+        print(f"\n{Colors.BOLD}{Colors.GREEN}✓ CPU Job Statistics section completed{Colors.END}")
+        print(f"{Colors.BOLD}{Colors.GREEN}✓ Slurm cgroup settings configured{Colors.END}")
+        print(f"{Colors.BOLD}{Colors.GREEN}✓ cgroup_exporter installed and running{Colors.END}")
+        
         print(f"\n{Colors.BOLD}{Colors.YELLOW}Next Steps:{Colors.END}")
         print(f"1. Restart Slurm services to apply cgroup configuration:")
         print(f"   • {Colors.WHITE}systemctl restart slurmctld{Colors.END}")
@@ -648,12 +670,12 @@ EOF''',
         print(f"   • {Colors.WHITE}curl http://localhost:{self.config['cgroup_exporter_port']}/metrics{Colors.END}")
         
         if not self.dry_run:
-            input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+            self._safe_continue()
         else:
             print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
         return True
 
-    def section_gpu_scripts(self):
+    def section_gpu_job_stats(self):
         """Section 3: GPU Job Statistics"""
         self._print_header(
             "3. GPU Job Statistics",
@@ -671,7 +693,7 @@ EOF''',
         self._add_to_document("### What we'll do")
         self._add_to_document("")
         self._add_to_document("- 3a. Deploy nvidia_gpu_prometheus_exporter")
-        self._add_to_document("- 3b. GPU Job Ownership Helper")
+        self._add_to_document("- 3b. GPU Job Ownership Helper (prolog/epilog scripts)")
         self._add_to_document("")
         
         print(f"{Colors.BLUE}This section sets up GPU monitoring and the necessary scripts{Colors.END}")
@@ -679,7 +701,7 @@ EOF''',
         
         print(f"\n{Colors.BOLD}{Colors.WHITE}What we'll do:{Colors.END}")
         print(f"• 3a. Deploy nvidia_gpu_prometheus_exporter")
-        print(f"• 3b. GPU Job Ownership Helper")
+        print(f"• 3b. GPU Job Ownership Helper (prolog/epilog scripts)")
         
         # Subsection 3a: Deploy nvidia_gpu_prometheus_exporter
         print(f"\n{Colors.BOLD}{Colors.CYAN}3a. Deploy nvidia_gpu_prometheus_exporter{Colors.END}")
@@ -698,13 +720,23 @@ EOF''',
                 },
                 {
                     'host': dgx_node,
-                    'command': f'cd {self.working_dir} && git clone {self.repositories["nvidia_gpu_prometheus_exporter"]}',
-                    'description': f'Clone NVIDIA GPU exporter on {dgx_node}'
+                    'command': 'apt update && apt install -y golang-go',
+                    'description': f'Install Go compiler on {dgx_node}'
                 },
                 {
                     'host': dgx_node,
-                    'command': f'cd {self.working_dir}/nvidia_gpu_prometheus_exporter && make build',
+                    'command': f'cd {self.working_dir} && if [ -d nvidia_gpu_prometheus_exporter ]; then cd nvidia_gpu_prometheus_exporter && git pull; else git clone {self.repositories["nvidia_gpu_prometheus_exporter"]}; fi',
+                    'description': f'Clone or update NVIDIA GPU exporter on {dgx_node}'
+                },
+                {
+                    'host': dgx_node,
+                    'command': f'cd {self.working_dir}/nvidia_gpu_prometheus_exporter && go build',
                     'description': f'Build NVIDIA GPU exporter on {dgx_node}'
+                },
+                {
+                    'host': dgx_node,
+                    'command': 'systemctl stop nvidia_gpu_exporter || true',
+                    'description': f'Stop nvidia_gpu_exporter service on {dgx_node} (if running)'
                 },
                 {
                     'host': dgx_node,
@@ -722,7 +754,7 @@ After=network.target
 [Service]
 Type=simple
 User=prometheus
-ExecStart=/usr/local/bin/nvidia_gpu_prometheus_exporter --port={self.config['nvidia_gpu_exporter_port']}
+ExecStart=/usr/local/bin/nvidia_gpu_prometheus_exporter --web.listen-address=:{self.config['nvidia_gpu_exporter_port']}
 Restart=always
 RestartSec=5
 
@@ -735,6 +767,11 @@ EOF''',
                     'host': dgx_node,
                     'command': 'systemctl daemon-reload && systemctl enable nvidia_gpu_exporter && systemctl start nvidia_gpu_exporter',
                     'description': f'Start NVIDIA GPU exporter service on {dgx_node}'
+                },
+                {
+                    'host': dgx_node,
+                    'command': 'setcap cap_sys_ptrace=eip /usr/local/bin/nvidia_gpu_prometheus_exporter',
+                    'description': f'Set capabilities for nvidia_gpu_prometheus_exporter to read procfs on {dgx_node}'
                 }
             ])
         
@@ -771,65 +808,104 @@ EOF''',
         
         print(f"\n{Colors.BOLD}{Colors.GREEN}✓ NVIDIA GPU exporter installation and verification completed{Colors.END}")
         
-        # Subsection 3b: GPU Job Ownership Helper
-        print(f"\n{Colors.BOLD}{Colors.CYAN}3b. GPU Job Ownership Helper{Colors.END}")
-        self._add_to_document("### 3b. GPU Job Ownership Helper")
+        # Subsection 3b: GPU Job Ownership Helper (prolog/epilog scripts)
+        print(f"\n{Colors.BOLD}{Colors.CYAN}3b. GPU Job Ownership Helper (prolog/epilog scripts){Colors.END}")
+        self._add_to_document("### 3b. GPU Job Ownership Helper (prolog/epilog scripts)")
         self._add_to_document("")
-        self._add_to_document("#### BCM Configuration Required")
+        self._add_to_document("#### BCM Script Discovery System")
         self._add_to_document("")
-        self._add_to_document("Add the following to your slurm.conf:")
+        self._add_to_document("BCM uses a generic prolog/epilog system that automatically calls all scripts")
+        self._add_to_document("in specific directories. We'll install jobstats scripts using BCM's pattern:")
         self._add_to_document("")
-        self._add_to_document("```")
-        self._add_to_document("Prolog=/etc/slurm/prolog.d/*.sh")
-        self._add_to_document("Epilog=/etc/slurm/epilog.d/*.sh")
-        self._add_to_document("```")
+        self._add_to_document("- **Script locations:** `/cm/local/apps/slurm/var/prologs/` and `/cm/local/apps/slurm/var/epilogs/`")
+        self._add_to_document("- **Shared storage:** `/cm/shared/apps/slurm/var/cm/` (accessible to all nodes)")
+        self._add_to_document("- **Symlink pattern:** Local symlinks point to shared storage scripts")
+        self._add_to_document("- **Naming convention:** Use `60-` prefix to run after existing BCM scripts")
         self._add_to_document("")
         
-        # Commands for GPU ownership helper
-        gpu_helper_commands = []
+        # Get slurm controller from config
+        slurm_controller = self.config['systems']['slurm_controller'][0]
         
-        for dgx_node in self.config['systems']['dgx_nodes']:
-            gpu_helper_commands.extend([
-                {
-                    'host': dgx_node,
-                    'command': f'cd {self.working_dir} && git clone {self.repositories["jobstats"]}',
-                    'description': f'Clone jobstats repository on {dgx_node}'
-                },
-                {
-                    'host': dgx_node,
-                    'command': 'mkdir -p /run/gpustat',
-                    'description': f'Create GPU status directory on {dgx_node}'
-                },
-                {
-                    'host': dgx_node,
-                    'command': f'cp {self.working_dir}/jobstats/slurm/prolog.d/gpustats_helper.sh /etc/slurm/prolog.d/',
-                    'description': f'Install prolog script on {dgx_node}'
-                },
-                {
-                    'host': dgx_node,
-                    'command': f'cp {self.working_dir}/jobstats/slurm/epilog.d/gpustats_helper.sh /etc/slurm/epilog.d/',
-                    'description': f'Install epilog script on {dgx_node}'
-                },
-                {
-                    'host': dgx_node,
-                    'command': 'chmod +x /etc/slurm/prolog.d/gpustats_helper.sh /etc/slurm/epilog.d/gpustats_helper.sh',
-                    'description': f'Make scripts executable on {dgx_node}'
-                }
-            ])
+        # Step 1: Clone jobstats repository
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 1: Cloning jobstats repository{Colors.END}")
         
-        if not self._execute_commands(gpu_helper_commands, "GPU Job Ownership Helper Installation"):
-            print(f"\n{Colors.RED}✗ GPU job ownership helper installation failed{Colors.END}")
+        clone_commands = [
+            {
+                'host': slurm_controller,
+                'command': 'mkdir -p /opt/jobstats-deployment',
+                'description': 'Create working directory for jobstats deployment'
+            },
+            {
+                'host': slurm_controller,
+                'command': 'cd /opt/jobstats-deployment && if [ -d jobstats ]; then cd jobstats && git pull; else git clone https://github.com/PrincetonUniversity/jobstats.git; fi',
+                'description': 'Clone or update jobstats repository'
+            }
+        ]
+        
+        if not self._execute_commands(clone_commands, "Repository Cloning"):
+            print(f"\n{Colors.RED}✗ Failed to clone jobstats repository{Colors.END}")
             return False
         
-        print(f"\n{Colors.BOLD}{Colors.GREEN}✓ GPU job ownership helper installation completed{Colors.END}")
+        # Step 2: Install prolog/epilog scripts using BCM pattern
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 2: Installing prolog/epilog scripts using BCM pattern{Colors.END}")
         
-        print(f"\n{Colors.BOLD}{Colors.YELLOW}BCM Configuration Required:{Colors.END}")
-        print(f"Add the following to your slurm.conf:")
-        print(f"• {Colors.WHITE}Prolog=/etc/slurm/prolog.d/*.sh{Colors.END}")
-        print(f"• {Colors.WHITE}Epilog=/etc/slurm/epilog.d/*.sh{Colors.END}")
+        install_commands = [
+            {
+                'host': slurm_controller,
+                'command': 'mkdir -p /cm/shared/apps/slurm/var/cm',
+                'description': 'Create shared storage directory for jobstats scripts'
+            },
+            {
+                'host': slurm_controller,
+                'command': 'cp /opt/jobstats-deployment/jobstats/slurm/prolog.d/gpustats_helper.sh /cm/shared/apps/slurm/var/cm/prolog-jobstats.sh',
+                'description': 'Copy prolog script to shared storage'
+            },
+            {
+                'host': slurm_controller,
+                'command': 'chmod +x /cm/shared/apps/slurm/var/cm/prolog-jobstats.sh',
+                'description': 'Make prolog script executable'
+            },
+            {
+                'host': slurm_controller,
+                'command': 'cp /opt/jobstats-deployment/jobstats/slurm/epilog.d/gpustats_helper.sh /cm/shared/apps/slurm/var/cm/epilog-jobstats.sh',
+                'description': 'Copy epilog script to shared storage'
+            },
+            {
+                'host': slurm_controller,
+                'command': 'chmod +x /cm/shared/apps/slurm/var/cm/epilog-jobstats.sh',
+                'description': 'Make epilog script executable'
+            },
+            {
+                'host': slurm_controller,
+                'command': 'mkdir -p /cm/local/apps/slurm/var/prologs',
+                'description': 'Create local prolog directory'
+            },
+            {
+                'host': slurm_controller,
+                'command': 'mkdir -p /cm/local/apps/slurm/var/epilogs',
+                'description': 'Create local epilog directory'
+            },
+            {
+                'host': slurm_controller,
+                'command': 'ln -sf /cm/shared/apps/slurm/var/cm/prolog-jobstats.sh /cm/local/apps/slurm/var/prologs/60-prolog-jobstats.sh',
+                'description': 'Create prolog symlink (60- prefix for execution order)'
+            },
+            {
+                'host': slurm_controller,
+                'command': 'ln -sf /cm/shared/apps/slurm/var/cm/epilog-jobstats.sh /cm/local/apps/slurm/var/epilogs/60-epilog-jobstats.sh',
+                'description': 'Create epilog symlink (60- prefix for execution order)'
+            }
+        ]
+        
+        if not self._execute_commands(install_commands, "BCM Script Installation"):
+            print(f"\n{Colors.RED}✗ Failed to install BCM scripts{Colors.END}")
+            return False
+        
+        print(f"\n{Colors.BOLD}{Colors.GREEN}✓ GPU Job Ownership Helper section completed{Colors.END}")
+        print(f"{Colors.BOLD}{Colors.GREEN}✓ Prolog/epilog scripts installed using BCM method{Colors.END}")
         
         if not self.dry_run:
-            input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+            self._safe_continue()
         else:
             print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
         return True
@@ -875,13 +951,18 @@ EOF''',
             node_commands.extend([
                 {
                     'host': dgx_node,
-                    'command': f'cd {self.working_dir} && git clone {self.repositories["node_exporter"]}',
-                    'description': f'Clone node_exporter on {dgx_node}'
+                    'command': f'cd {self.working_dir} && if [ -d node_exporter ]; then cd node_exporter && git pull; else git clone {self.repositories["node_exporter"]}; fi',
+                    'description': f'Clone or update node_exporter on {dgx_node}'
                 },
                 {
                     'host': dgx_node,
                     'command': f'cd {self.working_dir}/node_exporter && make build',
                     'description': f'Build node_exporter on {dgx_node}'
+                },
+                {
+                    'host': dgx_node,
+                    'command': 'systemctl stop node_exporter || true',
+                    'description': f'Stop node_exporter service on {dgx_node} (if running)'
                 },
                 {
                     'host': dgx_node,
@@ -904,7 +985,7 @@ After=network.target
 [Service]
 Type=simple
 User=prometheus
-ExecStart=/usr/local/bin/node_exporter --port={self.config['node_exporter_port']}
+ExecStart=/usr/local/bin/node_exporter --web.listen-address=:{self.config['node_exporter_port']}
 Restart=always
 RestartSec=5
 
@@ -955,20 +1036,20 @@ EOF''',
         print(f"{Colors.BOLD}{Colors.GREEN}✓ Node exporter verification completed{Colors.END}")
         
         if not self.dry_run:
-            input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+            self._safe_continue()
         else:
             print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
         return True
 
-    def section_summaries(self):
-        """Section 5: Generating Job Summaries"""
+    def section_job_summaries(self):
+        """Section 5: Job Summaries"""
         self._print_header(
-            "5. Generating Job Summaries",
+            "5. Job Summaries",
             "Setup slurmctld epilog for job summary retention"
         )
         
         # Add to document
-        self._add_to_document("## 5. Generating Job Summaries")
+        self._add_to_document("## 5. Job Summaries")
         self._add_to_document("")
         self._add_to_document("### Description")
         self._add_to_document("")
@@ -978,16 +1059,7 @@ EOF''',
         self._add_to_document("### What we'll do")
         self._add_to_document("")
         self._add_to_document("- Install slurmctld epilog script")
-        self._add_to_document("- Configure BCM for epilog execution")
-        self._add_to_document("- Test job summary generation")
-        self._add_to_document("")
-        self._add_to_document("### BCM Configuration Required")
-        self._add_to_document("")
-        self._add_to_document("Add the following to your slurm.conf:")
-        self._add_to_document("")
-        self._add_to_document("```")
-        self._add_to_document("EpilogSlurmctld=/usr/local/sbin/slurmctldepilog.sh")
-        self._add_to_document("```")
+        self._add_to_document("- Configure BCM epilogslurmctld setting")
         self._add_to_document("")
         
         print(f"{Colors.BLUE}This section sets up the slurmctld epilog script{Colors.END}")
@@ -995,35 +1067,72 @@ EOF''',
         
         print(f"\n{Colors.BOLD}{Colors.WHITE}What we'll do:{Colors.END}")
         print(f"• Install slurmctld epilog script")
-        print(f"• Configure BCM for epilog execution")
-        print(f"• Test job summary generation")
+        print(f"• Configure BCM epilogslurmctld setting")
         
-        # Commands for Slurm controller
-        summary_commands = [
+        # Get slurm controller from config
+        slurm_controller = self.config['systems']['slurm_controller'][0]
+        
+        # Step 1: Clone jobstats repository
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 1: Cloning jobstats repository{Colors.END}")
+        
+        clone_commands = [
             {
-                'host': self.config['systems']['slurm_controller'][0] if self.config['systems']['slurm_controller'] else 'slurm-controller',
-                'command': f'cp {self.working_dir}/jobstats/slurm/slurmctldepilog.sh /usr/local/sbin/',
-                'description': 'Install slurmctld epilog script'
+                'host': slurm_controller,
+                'command': 'mkdir -p /opt/jobstats-deployment',
+                'description': 'Create working directory for jobstats deployment'
             },
             {
-                'host': self.config['systems']['slurm_controller'][0] if self.config['systems']['slurm_controller'] else 'slurm-controller',
-                'command': 'chmod +x /usr/local/sbin/slurmctldepilog.sh',
-                'description': 'Make epilog script executable'
+                'host': slurm_controller,
+                'command': 'cd /opt/jobstats-deployment && if [ -d jobstats ]; then cd jobstats && git pull; else git clone https://github.com/PrincetonUniversity/jobstats.git; fi',
+                'description': 'Clone or update jobstats repository'
             }
         ]
         
-        if self._execute_commands(summary_commands):
-            print(f"\n{Colors.GREEN}✓ Job summary setup completed{Colors.END}")
-        else:
-            print(f"\n{Colors.RED}✗ Job summary setup failed{Colors.END}")
+        if not self._execute_commands(clone_commands, "Repository Cloning"):
+            print(f"\n{Colors.RED}✗ Failed to clone jobstats repository{Colors.END}")
             return False
         
-        print(f"\n{Colors.BOLD}{Colors.YELLOW}BCM Configuration Required:{Colors.END}")
-        print(f"Add the following to your slurm.conf:")
-        print(f"• {Colors.WHITE}EpilogSlurmctld=/usr/local/sbin/slurmctldepilog.sh{Colors.END}")
+        # Step 2: Install slurmctld epilog script
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 2: Installing slurmctld epilog script{Colors.END}")
+        
+        install_commands = [
+            {
+                'host': slurm_controller,
+                'command': 'cp /opt/jobstats-deployment/jobstats/slurm/slurmctldepilog.sh /usr/local/sbin/',
+                'description': 'Copy slurmctld epilog script for job summaries'
+            },
+            {
+                'host': slurm_controller,
+                'command': 'chmod +x /usr/local/sbin/slurmctldepilog.sh',
+                'description': 'Make slurmctld epilog script executable'
+            }
+        ]
+        
+        if not self._execute_commands(install_commands, "Slurmctld Epilog Installation"):
+            print(f"\n{Colors.RED}✗ Failed to install slurmctld epilog script{Colors.END}")
+            return False
+        
+        # Step 3: Configure BCM epilogslurmctld setting
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 3: Configuring BCM epilogslurmctld setting{Colors.END}")
+        
+        bcm_commands = [
+            {
+                'host': None,  # Run locally on BCM headnode
+                'command': 'cmsh -c "wlm;use slurm;set epilogslurmctld /usr/local/sbin/slurmctldepilog.sh;commit"',
+                'description': 'Configure BCM epilogslurmctld setting'
+            }
+        ]
+        
+        if not self._execute_commands(bcm_commands, "BCM Configuration"):
+            print(f"\n{Colors.RED}✗ Failed to configure BCM settings{Colors.END}")
+            return False
+        
+        print(f"\n{Colors.BOLD}{Colors.GREEN}✓ Job Summaries section completed{Colors.END}")
+        print(f"{Colors.BOLD}{Colors.GREEN}✓ Slurmctld epilog script installed{Colors.END}")
+        print(f"{Colors.BOLD}{Colors.GREEN}✓ BCM epilogslurmctld setting configured{Colors.END}")
         
         if not self.dry_run:
-            input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+            self._safe_continue()
         else:
             print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
         return True
@@ -1104,7 +1213,7 @@ EOF''',
         self._create_prometheus_config()
         
         if not self.dry_run:
-            input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+            self._safe_continue()
         else:
             print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
         return True
@@ -1241,7 +1350,7 @@ scrape_configs:
         print(f"4. Import jobstats dashboard from .jobstats/jobstats/grafana/")
         
         if not self.dry_run:
-            input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+            self._safe_continue()
         else:
             print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
         return True
@@ -1280,6 +1389,11 @@ scrape_configs:
         ood_commands = [
             {
                 'host': 'localhost',
+                'command': f'mkdir -p {self.working_dir}',
+                'description': 'Create working directory for OOD helper'
+            },
+            {
+                'host': 'localhost',
                 'command': f'cd {self.working_dir} && git clone https://github.com/PrincetonUniversity/jobstats.git',
                 'description': 'Clone jobstats repository for OOD helper'
             },
@@ -1302,7 +1416,7 @@ scrape_configs:
         print(f"• Follow the README in that directory for OOD integration")
         
         if not self.dry_run:
-            input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+            self._safe_continue()
         else:
             print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
         return True
@@ -1381,7 +1495,7 @@ scrape_configs:
         print(f"• {Colors.WHITE}PROM_RETENTION_DAYS = {self.config['prometheus_retention_days']}{Colors.END}")
         
         if not self.dry_run:
-            input(f"\n{Colors.YELLOW}Press Enter to continue...{Colors.END}")
+            self._safe_continue("Press Enter to continue...")
         else:
             print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
         return True
@@ -1437,32 +1551,32 @@ scrape_configs:
         # Commands for Slurm category
         slurm_category_commands = [
             {
-                'host': 'localhost',
+                'host': None,  # Run locally on BCM headnode
                 'command': f'cmsh -c "category; use {slurm_category}; services; add cgroup_exporter"',
                 'description': f'Add cgroup_exporter to {slurm_category} category'
             },
             {
-                'host': 'localhost',
+                'host': None,  # Run locally on BCM headnode
                 'command': f'cmsh -c "category; use {slurm_category}; services; use cgroup_exporter; set autostart yes; set monitored yes; commit"',
                 'description': f'Configure cgroup_exporter for {slurm_category} category'
             },
             {
-                'host': 'localhost',
+                'host': None,  # Run locally on BCM headnode
                 'command': f'cmsh -c "category; use {slurm_category}; services; add node_exporter"',
                 'description': f'Add node_exporter to {slurm_category} category'
             },
             {
-                'host': 'localhost',
+                'host': None,  # Run locally on BCM headnode
                 'command': f'cmsh -c "category; use {slurm_category}; services; use node_exporter; set autostart yes; set monitored yes; commit"',
                 'description': f'Configure node_exporter for {slurm_category} category'
             },
             {
-                'host': 'localhost',
+                'host': None,  # Run locally on BCM headnode
                 'command': f'cmsh -c "category; use {slurm_category}; services; add nvidia_gpu_prometheus_exporter"',
                 'description': f'Add nvidia_gpu_prometheus_exporter to {slurm_category} category'
             },
             {
-                'host': 'localhost',
+                'host': None,  # Run locally on BCM headnode
                 'command': f'cmsh -c "category; use {slurm_category}; services; use nvidia_gpu_prometheus_exporter; set autostart yes; set monitored yes; commit"',
                 'description': f'Configure nvidia_gpu_prometheus_exporter for {slurm_category} category'
             }
@@ -1477,32 +1591,32 @@ scrape_configs:
         # Commands for Kubernetes category
         kubernetes_category_commands = [
             {
-                'host': 'localhost',
+                'host': None,  # Run locally on BCM headnode
                 'command': f'cmsh -c "category; use {kubernetes_category}; services; add cgroup_exporter"',
                 'description': f'Add cgroup_exporter to {kubernetes_category} category (disabled)'
             },
             {
-                'host': 'localhost',
+                'host': None,  # Run locally on BCM headnode
                 'command': f'cmsh -c "category; use {kubernetes_category}; services; use cgroup_exporter; set autostart no; set monitored no; commit"',
                 'description': f'Configure cgroup_exporter for {kubernetes_category} category (disabled)'
             },
             {
-                'host': 'localhost',
+                'host': None,  # Run locally on BCM headnode
                 'command': f'cmsh -c "category; use {kubernetes_category}; services; add node_exporter"',
                 'description': f'Add node_exporter to {kubernetes_category} category (disabled)'
             },
             {
-                'host': 'localhost',
+                'host': None,  # Run locally on BCM headnode
                 'command': f'cmsh -c "category; use {kubernetes_category}; services; use node_exporter; set autostart no; set monitored no; commit"',
                 'description': f'Configure node_exporter for {kubernetes_category} category (disabled)'
             },
             {
-                'host': 'localhost',
+                'host': None,  # Run locally on BCM headnode
                 'command': f'cmsh -c "category; use {kubernetes_category}; services; add nvidia_gpu_prometheus_exporter"',
                 'description': f'Add nvidia_gpu_prometheus_exporter to {kubernetes_category} category (disabled)'
             },
             {
-                'host': 'localhost',
+                'host': None,  # Run locally on BCM headnode
                 'command': f'cmsh -c "category; use {kubernetes_category}; services; use nvidia_gpu_prometheus_exporter; set autostart no; set monitored no; commit"',
                 'description': f'Configure nvidia_gpu_prometheus_exporter for {kubernetes_category} category (disabled)'
             }
@@ -1603,11 +1717,71 @@ scrape_configs:
         self._add_to_document("- **Service management:** Category-based services automatically start/stop")
         self._add_to_document("")
         
+        # Subsection 10c: Setcap Commands Notification
+        print(f"\n{Colors.BOLD}{Colors.CYAN}10c. Setcap Commands Notification{Colors.END}")
+        self._add_to_document("### 10c. Setcap Commands Notification")
+        self._add_to_document("")
+        self._add_to_document("#### Important: Setcap Commands and Extended Attributes")
+        self._add_to_document("")
+        self._add_to_document("During the deployment, the following `setcap` commands were executed:")
+        self._add_to_document("")
+        
+        # Track setcap commands that were run
+        setcap_commands = []
+        for dgx_node in self.config['systems']['dgx_nodes']:
+            setcap_commands.append({
+                'host': dgx_node,
+                'command': 'setcap cap_sys_ptrace=eip /usr/local/bin/cgroup_exporter',
+                'description': 'Set capabilities for cgroup_exporter to read procfs'
+            })
+            setcap_commands.append({
+                'host': dgx_node,
+                'command': 'setcap cap_sys_ptrace=eip /usr/local/bin/nvidia_gpu_prometheus_exporter',
+                'description': 'Set capabilities for nvidia_gpu_prometheus_exporter to read procfs'
+            })
+        
+        # Add setcap commands to document
+        for cmd in setcap_commands:
+            self._add_to_document(f"**{cmd['host']}:**")
+            self._add_to_document(f"```bash")
+            self._add_to_document(f"{cmd['command']}")
+            self._add_to_document(f"```")
+            self._add_to_document("")
+        
+        self._add_to_document("#### Extended Attributes (xattrs) Warning")
+        self._add_to_document("")
+        self._add_to_document("**IMPORTANT:** If your software images are stored on a file system")
+        self._add_to_document("that does not support extended attributes (xattrs), such as an NFS export,")
+        self._add_to_document("you may need to take additional steps to ensure that these `setcap` commands")
+        self._add_to_document("are run when your systems boot.")
+        self._add_to_document("")
+        self._add_to_document("**Recommended solutions:**")
+        self._add_to_document("- Add the `setcap` commands to your system startup scripts")
+        self._add_to_document("- Include them in your BCM imaging process")
+        self._add_to_document("- Create a systemd service that runs the commands on boot")
+        self._add_to_document("")
+        
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Setcap Commands Executed:{Colors.END}")
+        for cmd in setcap_commands:
+            print(f"• {Colors.WHITE}{cmd['host']}: {cmd['command']}{Colors.END}")
+        
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Extended Attributes (xattrs) Warning:{Colors.END}")
+        print(f"If your software images are stored on a file system that does not")
+        print(f"support extended attributes (xattrs), such as an NFS export, you may")
+        print(f"need to take additional steps to ensure that these setcap commands")
+        print(f"are run when your systems boot.")
+        print(f"")
+        print(f"Recommended solutions:")
+        print(f"• Add the setcap commands to your system startup scripts")
+        print(f"• Include them in your BCM imaging process")
+        print(f"• Create a systemd service that runs the commands on boot")
+        
         print(f"\n{Colors.BOLD}{Colors.GREEN}✓ BCM configuration completed{Colors.END}")
         print(f"{Colors.BOLD}{Colors.GREEN}✓ Imaging instructions provided{Colors.END}")
+        print(f"{Colors.BOLD}{Colors.GREEN}✓ Setcap commands documented{Colors.END}")
         
         if not self.dry_run:
-            input(f"\n{Colors.YELLOW}Press Enter to continue...{Colors.END}")
+            self._safe_continue("Press Enter to continue...")
         else:
             print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
         return True
