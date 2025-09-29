@@ -68,3 +68,7 @@ automation/configs/config.json
 
 # Keep the logs directory but ignore most contents
 !automation/logs/.gitkeep
+
+# BCM documentation text files (generated content)
+.bcm-documentation-text/
+bcm-documentation-text/
