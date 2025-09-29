@@ -278,18 +278,19 @@ class GuidedJobstatsSetup:
         for host, host_commands in commands_by_host.items():
             self._add_to_document(f"#### Host: {host}")
             self._add_to_document("")
+            self._add_to_document("```bash")
             for i, cmd in enumerate(host_commands, 1):
                 description = cmd.get('description', '')
                 command = cmd['command']
                 if description:
-                    self._add_to_document(f"**{i}. {description}**")
+                    self._add_to_document(f"# Step {i} - {description}")
                 else:
-                    self._add_to_document(f"**{i}. Command**")
+                    self._add_to_document(f"# Step {i}")
                 self._add_to_document("")
-                self._add_to_document("```bash")
                 self._add_to_document(command)
-                self._add_to_document("```")
                 self._add_to_document("")
+            self._add_to_document("```")
+            self._add_to_document("")
             self._add_to_document("---")
             self._add_to_document("")
         
