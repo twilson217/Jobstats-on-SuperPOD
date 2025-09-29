@@ -45,8 +45,8 @@ class BCMJobstatsDeployer:
         # Repository URLs
         self.repositories = {
             'jobstats': 'https://github.com/PrincetonUniversity/jobstats.git',
-            'cgroup_exporter': 'https://github.com/PrincetonUniversity/cgroup_exporter.git',
-            'nvidia_gpu_prometheus_exporter': 'https://github.com/PrincetonUniversity/nvidia_gpu_prometheus_exporter.git',
+            'cgroup_exporter': 'https://github.com/plazonic/cgroup_exporter.git',
+            'nvidia_gpu_prometheus_exporter': 'https://github.com/plazonic/nvidia_gpu_prometheus_exporter.git',
             'node_exporter': 'https://github.com/prometheus/node_exporter.git'
         }
         
@@ -122,7 +122,7 @@ class BCMJobstatsDeployer:
         return default_config
 
     def _run_command(self, command: str, host: Optional[str] = None, 
-                    capture_output: bool = False) -> Tuple[int, str, str]:
+                    capture_output: bool = True) -> Tuple[int, str, str]:
         """Run a command locally or on a remote host."""
         if self.dry_run:
             if host:
@@ -144,7 +144,7 @@ class BCMJobstatsDeployer:
                 result = subprocess.run(command, shell=True, capture_output=capture_output,
                                       text=True, check=False)
             
-            return result.returncode, result.stdout, result.stderr
+            return result.returncode, result.stdout or "", result.stderr or ""
         except Exception as e:
             logger.error(f"Error executing command '{command}' on {host or 'localhost'}: {e}")
             return 1, "", str(e)
@@ -168,7 +168,10 @@ class BCMJobstatsDeployer:
         for cmd in cmsh_commands:
             returncode, stdout, stderr = self._run_command(cmd)
             if returncode == 0:
-                logger.info(f"BCM configuration verified: {stdout.strip()}")
+                if stdout and stdout.strip():
+                    logger.info(f"BCM configuration verified: {stdout.strip()}")
+                else:
+                    logger.info("BCM configuration verified (no output)")
             else:
                 logger.warning(f"Could not verify BCM config: {stderr}")
         
@@ -219,10 +222,16 @@ class BCMJobstatsDeployer:
             returncode, _, _ = self._run_command(f"test -d {repo_path}", host)
             if returncode == 0:
                 logger.info(f"Repository {repo_name} already exists on {host}, updating...")
-                self._run_command(f"cd {repo_path} && git pull", host)
+                returncode, stdout, stderr = self._run_command(f"cd {repo_path} && git pull", host)
+                if returncode != 0:
+                    logger.error(f"Failed to update {repo_name}: {stderr}")
+                    return False
             else:
                 logger.info(f"Cloning {repo_name} on {host}...")
-                self._run_command(f"cd {self.working_dir} && git clone {repo_url}", host)
+                returncode, stdout, stderr = self._run_command(f"cd {self.working_dir} && git clone {repo_url}", host)
+                if returncode != 0:
+                    logger.error(f"Failed to clone {repo_name}: {stderr}")
+                    return False
         
         return True
 
@@ -561,13 +570,19 @@ WantedBy=multi-user.target
         
         for service_name, service_content in services:
             service_path = f"/etc/systemd/system/{service_name}"
-            # Create temporary file and copy to target
-            with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
-                f.write(service_content)
-                temp_file = f.name
             
-            self._run_command(f"cp {temp_file} {service_path}", host)
-            os.unlink(temp_file)
+            if self.dry_run:
+                # In dry-run mode, just log what would be done
+                logger.info(f"[DRY RUN] Would create {service_path}")
+                logger.debug(f"[DRY RUN] Service content:\n{service_content}")
+            else:
+                # Create temporary file and copy to target
+                with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+                    f.write(service_content)
+                    temp_file = f.name
+                
+                self._run_command(f"cp {temp_file} {service_path}", host)
+                os.unlink(temp_file)
         
         return True
 
@@ -648,13 +663,17 @@ scrape_configs:
 """
         
         # Write config file
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
-            f.write(prometheus_config)
-            temp_file = f.name
-        
-        self._run_command(f"cp {temp_file} /etc/prometheus/prometheus.yml", host)
-        self._run_command("chown -R prometheus:prometheus /etc/prometheus /var/lib/prometheus", host)
-        os.unlink(temp_file)
+        if self.dry_run:
+            logger.info(f"[DRY RUN] Would create /etc/prometheus/prometheus.yml")
+            logger.debug(f"[DRY RUN] Prometheus config:\n{prometheus_config}")
+        else:
+            with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+                f.write(prometheus_config)
+                temp_file = f.name
+            
+            self._run_command(f"cp {temp_file} /etc/prometheus/prometheus.yml", host)
+            self._run_command("chown -R prometheus:prometheus /etc/prometheus /var/lib/prometheus", host)
+            os.unlink(temp_file)
         
         return True
 
@@ -688,12 +707,16 @@ StandardError=journal
 WantedBy=multi-user.target
 """
         
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
-            f.write(prometheus_service)
-            temp_file = f.name
-        
-        self._run_command(f"cp {temp_file} /etc/systemd/system/prometheus.service", host)
-        os.unlink(temp_file)
+        if self.dry_run:
+            logger.info(f"[DRY RUN] Would create /etc/systemd/system/prometheus.service")
+            logger.debug(f"[DRY RUN] Prometheus service content:\n{prometheus_service}")
+        else:
+            with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+                f.write(prometheus_service)
+                temp_file = f.name
+            
+            self._run_command(f"cp {temp_file} /etc/systemd/system/prometheus.service", host)
+            os.unlink(temp_file)
         
         return True
 
