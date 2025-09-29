@@ -197,8 +197,8 @@ main() {
     fi
     
     if [[ "$bcm_category_management" == "true" ]]; then
-        prompt_with_default "Slurm category name" "slurm-category" slurm_category
-        prompt_with_default "Kubernetes category name" "kubernetes-category" kubernetes_category
+        prompt_with_default "BCM category for DGX's running Slurm" "slurm-category" slurm_category
+        prompt_with_default "BCM category for DGX's running Kubernetes" "kubernetes-category" kubernetes_category
     else
         slurm_category="slurm-category"
         kubernetes_category="kubernetes-category"
