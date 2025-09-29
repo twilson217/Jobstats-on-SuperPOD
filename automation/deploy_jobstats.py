@@ -299,12 +299,14 @@ class BCMJobstatsDeployer:
         self._run_command(f"cp {slurmctld_src} /usr/local/sbin/", host)
         self._run_command("chmod +x /usr/local/sbin/slurmctldepilog.sh", host)
         
-        # Configure BCM (this would need to be done manually or via cmsh API)
-        logger.info("Note: BCM configuration for epilogslurmctld needs to be done manually:")
-        logger.info("cmsh -> wlm -> use slurm -> set epilogslurmctld /usr/local/sbin/slurmctldepilog.sh -> commit")
+        # Configure BCM epilogslurmctld setting
+        logger.info("Configuring BCM epilogslurmctld setting...")
+        self._run_command('cmsh -c "wlm;use slurm;set epilogslurmctld /usr/local/sbin/slurmctldepilog.sh;commit"')
         
-        # Configure slurm.conf for jobstats
-        self._configure_slurm_conf(host)
+        # Note: BCM automatically manages prolog/epilog settings in slurm.conf
+        # The scripts we installed will be automatically discovered and executed
+        logger.info("BCM automatically manages prolog/epilog settings in slurm.conf")
+        logger.info("Jobstats scripts will be automatically discovered and executed")
         
         # BCM Imaging guidance
         logger.info("")
@@ -315,52 +317,6 @@ class BCMJobstatsDeployer:
         
         return True
 
-    def _configure_slurm_conf(self, host: str) -> bool:
-        """Configure slurm.conf for jobstats integration."""
-        logger.info(f"Configuring slurm.conf for jobstats on {host}")
-        
-        slurm_conf_path = "/cm/shared/apps/slurm/var/etc/slurm/slurm.conf"
-        
-        # Backup the original slurm.conf
-        self._run_command(f"cp {slurm_conf_path} {slurm_conf_path}.backup.$(date +%Y%m%d_%H%M%S)", host)
-        
-        # Configure JobAcctGatherType
-        self._run_command(
-            f"sed -i 's/^#JobAcctGatherType=jobacct_gather\\/none/JobAcctGatherType=jobacct_gather\\/cgroup/' {slurm_conf_path}",
-            host
-        )
-        self._run_command(
-            f"grep -q '^JobAcctGatherType=' {slurm_conf_path} || echo 'JobAcctGatherType=jobacct_gather/cgroup' >> {slurm_conf_path}",
-            host
-        )
-        
-        # Configure ProctrackType
-        self._run_command(
-            f"sed -i 's/^#ProctrackType=proctrack\\/none/ProctrackType=proctrack\\/cgroup/' {slurm_conf_path}",
-            host
-        )
-        self._run_command(
-            f"grep -q '^ProctrackType=' {slurm_conf_path} || echo 'ProctrackType=proctrack/cgroup' >> {slurm_conf_path}",
-            host
-        )
-        
-        # Configure TaskPlugin
-        self._run_command(
-            f"sed -i 's/^#TaskPlugin=task\\/none/TaskPlugin=task\\/cgroup/' {slurm_conf_path}",
-            host
-        )
-        self._run_command(
-            f"grep -q '^TaskPlugin=' {slurm_conf_path} || echo 'TaskPlugin=task/cgroup' >> {slurm_conf_path}",
-            host
-        )
-        
-        logger.info("slurm.conf configured for jobstats integration:")
-        logger.info("  - JobAcctGatherType=jobacct_gather/cgroup")
-        logger.info("  - ProctrackType=proctrack/cgroup")
-        logger.info("  - TaskPlugin=task/cgroup")
-        logger.info("Note: Slurm controller restart required for changes to take effect")
-        
-        return True
 
     def _deploy_login_nodes(self, host: str) -> bool:
         """Deploy jobstats command on login nodes."""

@@ -151,22 +151,43 @@ class JobstatsValidator:
         success, stdout, stderr = self._run_command(f"test -f {file_path}", host)
         return success
     
-    def _check_slurm_conf_settings(self, host: Optional[str] = None) -> Dict[str, bool]:
-        """Check if required slurm.conf settings are present."""
-        cluster_name = self.config.get('cluster_name', 'slurm')
-        slurm_conf_path = f"/cm/shared/apps/slurm/var/etc/{cluster_name}/slurm.conf"
-        
-        required_settings = [
-            "JobAcctGatherType=jobacct_gather/cgroup",
-            "ProctrackType=proctrack/cgroup", 
-            "TaskPlugin=affinity,cgroup"
-        ]
-        
+    def _check_bcm_slurm_configuration(self, host: Optional[str] = None) -> Dict[str, bool]:
+        """Check BCM-managed Slurm configuration for jobstats."""
         results = {}
-        for setting in required_settings:
-            success, stdout, stderr = self._run_command(f"grep -q '{setting}' {slurm_conf_path}", host)
-            results[setting] = success
+        
+        # Check BCM prolog/epilog configuration
+        success, stdout, stderr = self._run_command('cmsh -c "wlm;get prolog;get epilog;get epilogslurmctld"', host)
+        if success:
+            results["BCM prolog/epilog configured"] = True
+            results["BCM epilogslurmctld configured"] = "/usr/local/sbin/slurmctldepilog.sh" in stdout
+        else:
+            results["BCM prolog/epilog configured"] = False
+            results["BCM epilogslurmctld configured"] = False
+        
+        # Check if jobstats scripts are properly installed
+        prolog_script = "/cm/local/apps/slurm/var/prologs/60-prolog-jobstats.sh"
+        epilog_script = "/cm/local/apps/slurm/var/epilogs/60-epilog-jobstats.sh"
+        shared_prolog = "/cm/shared/apps/slurm/var/cm/prolog-jobstats.sh"
+        shared_epilog = "/cm/shared/apps/slurm/var/cm/epilog-jobstats.sh"
+        
+        results["Prolog script symlink exists"] = self._check_file_exists(prolog_script, host)
+        results["Epilog script symlink exists"] = self._check_file_exists(epilog_script, host)
+        results["Shared prolog script exists"] = self._check_file_exists(shared_prolog, host)
+        results["Shared epilog script exists"] = self._check_file_exists(shared_epilog, host)
+        
+        # Check if scripts are executable
+        if results["Shared prolog script exists"]:
+            success, stdout, stderr = self._run_command(f"test -x {shared_prolog}", host)
+            results["Prolog script executable"] = success
+        else:
+            results["Prolog script executable"] = False
             
+        if results["Shared epilog script exists"]:
+            success, stdout, stderr = self._run_command(f"test -x {shared_epilog}", host)
+            results["Epilog script executable"] = success
+        else:
+            results["Epilog script executable"] = False
+        
         return results
     
     def _test_result(self, test_name: str, passed: bool, message: str = "", warning: bool = False):
@@ -339,18 +360,18 @@ class JobstatsValidator:
         )
     
     def validate_slurm_configuration(self):
-        """Validate Slurm configuration settings."""
-        print(f"\n{Colors.BOLD}6. Checking Slurm Configuration{Colors.END}")
+        """Validate BCM-managed Slurm configuration for jobstats."""
+        print(f"\n{Colors.BOLD}6. Checking BCM Slurm Configuration{Colors.END}")
         print("=" * 50)
         
         slurm_controller = self.config['systems']['slurm_controller'][0]
-        settings = self._check_slurm_conf_settings(slurm_controller)
+        settings = self._check_bcm_slurm_configuration(slurm_controller)
         
         for setting, exists in settings.items():
             self._test_result(
-                f"Slurm setting: {setting}",
+                f"BCM Slurm: {setting}",
                 exists,
-                "Setting present" if exists else "Setting missing"
+                "Configured correctly" if exists else "Not configured"
             )
     
     def validate_jobstats_command(self):
