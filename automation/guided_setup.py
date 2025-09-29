@@ -746,7 +746,7 @@ EOF''',
                 {
                     'host': dgx_node,
                     'command': f'''# Create systemd service for NVIDIA GPU exporter
-cat > /etc/systemd/system/nvidia_gpu_exporter.service << 'EOF'
+cat > /tmp/nvidia_gpu_exporter.service << 'EOF'
 [Unit]
 Description=NVIDIA GPU Exporter
 After=network.target
@@ -760,7 +760,9 @@ RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
-EOF''',
+EOF
+cp /tmp/nvidia_gpu_exporter.service /etc/systemd/system/
+rm /tmp/nvidia_gpu_exporter.service''',
                     'description': f'Create NVIDIA GPU exporter systemd service on {dgx_node}'
                 },
                 {
@@ -896,6 +898,49 @@ EOF''',
                 'description': 'Create epilog symlink (60- prefix for execution order)'
             }
         ]
+        
+        # Add commands for BCM headnode and login nodes
+        login_nodes = self.config['systems'].get('login_nodes', [])
+        all_job_submission_nodes = [None] + login_nodes  # None = BCM headnode (localhost)
+        
+        for node in all_job_submission_nodes:
+            if node is None:  # BCM headnode
+                node_name = "BCM headnode"
+                install_commands.extend([
+                    {
+                        'host': None,  # BCM headnode (localhost)
+                        'command': 'mkdir -p /cm/local/apps/slurm/var/prologs /cm/local/apps/slurm/var/epilogs',
+                        'description': f'Create prolog/epilog directories on {node_name}'
+                    },
+                    {
+                        'host': None,  # BCM headnode (localhost)
+                        'command': 'ln -sf /cm/shared/apps/slurm/var/cm/prolog-jobstats.sh /cm/local/apps/slurm/var/prologs/60-prolog-jobstats.sh',
+                        'description': f'Create prolog symlink on {node_name}'
+                    },
+                    {
+                        'host': None,  # BCM headnode (localhost)
+                        'command': 'ln -sf /cm/shared/apps/slurm/var/cm/epilog-jobstats.sh /cm/local/apps/slurm/var/epilogs/60-epilog-jobstats.sh',
+                        'description': f'Create epilog symlink on {node_name}'
+                    }
+                ])
+            else:  # Login node
+                install_commands.extend([
+                    {
+                        'host': node,
+                        'command': 'mkdir -p /cm/local/apps/slurm/var/prologs /cm/local/apps/slurm/var/epilogs',
+                        'description': f'Create prolog/epilog directories on {node}'
+                    },
+                    {
+                        'host': node,
+                        'command': 'ln -sf /cm/shared/apps/slurm/var/cm/prolog-jobstats.sh /cm/local/apps/slurm/var/prologs/60-prolog-jobstats.sh',
+                        'description': f'Create prolog symlink on {node}'
+                    },
+                    {
+                        'host': node,
+                        'command': 'ln -sf /cm/shared/apps/slurm/var/cm/epilog-jobstats.sh /cm/local/apps/slurm/var/epilogs/60-epilog-jobstats.sh',
+                        'description': f'Create epilog symlink on {node}'
+                    }
+                ])
         
         if not self._execute_commands(install_commands, "BCM Script Installation"):
             print(f"\n{Colors.RED}✗ Failed to install BCM scripts{Colors.END}")
@@ -1212,6 +1257,49 @@ EOF''',
         # Create Prometheus configuration
         self._create_prometheus_config()
         
+        # Create and start Prometheus systemd service
+        prometheus_service_commands = [
+            {
+                'host': self.config['prometheus_server'],
+                'command': '''# Create systemd service for Prometheus
+cat > /tmp/prometheus.service << 'EOF'
+[Unit]
+Description=Prometheus
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=prometheus
+Group=prometheus
+ExecStart=/usr/local/bin/prometheus \\
+    --config.file=/etc/prometheus/prometheus.yml \\
+    --storage.tsdb.path=/var/lib/prometheus \\
+    --web.console.templates=/etc/prometheus/consoles \\
+    --web.console.libraries=/etc/prometheus/console_libraries \\
+    --web.listen-address=0.0.0.0:9090 \\
+    --web.enable-lifecycle
+
+[Install]
+WantedBy=multi-user.target
+EOF
+cp /tmp/prometheus.service /etc/systemd/system/
+rm /tmp/prometheus.service''',
+                'description': 'Create Prometheus systemd service'
+            },
+            {
+                'host': self.config['prometheus_server'],
+                'command': 'systemctl daemon-reload && systemctl enable prometheus && systemctl start prometheus',
+                'description': 'Start Prometheus service'
+            }
+        ]
+        
+        if self._execute_commands(prometheus_service_commands):
+            print(f"\n{Colors.GREEN}✓ Prometheus service started{Colors.END}")
+        else:
+            print(f"\n{Colors.RED}✗ Failed to start Prometheus service{Colors.END}")
+            return False
+        
         if not self.dry_run:
             self._safe_continue()
         else:
@@ -1341,6 +1429,21 @@ scrape_configs:
             print(f"\n{Colors.GREEN}✓ Grafana installation completed{Colors.END}")
         else:
             print(f"\n{Colors.RED}✗ Grafana installation failed{Colors.END}")
+            return False
+        
+        # Start and enable Grafana service
+        grafana_service_commands = [
+            {
+                'host': self.config['grafana_server'],
+                'command': 'systemctl daemon-reload && systemctl enable grafana-server && systemctl start grafana-server',
+                'description': 'Start Grafana service'
+            }
+        ]
+        
+        if self._execute_commands(grafana_service_commands):
+            print(f"\n{Colors.GREEN}✓ Grafana service started{Colors.END}")
+        else:
+            print(f"\n{Colors.RED}✗ Failed to start Grafana service{Colors.END}")
             return False
         
         print(f"\n{Colors.BOLD}{Colors.YELLOW}Manual Configuration Required:{Colors.END}")

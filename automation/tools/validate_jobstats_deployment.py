@@ -158,20 +158,26 @@ class JobstatsValidator:
         # Check BCM prolog/epilog configuration
         success, stdout, stderr = self._run_command('cmsh -c "wlm;get prolog;get epilog;get epilogslurmctld"', host)
         if success:
-            results["BCM prolog/epilog configured"] = True
-            results["BCM epilogslurmctld configured"] = "/usr/local/sbin/slurmctldepilog.sh" in stdout
+            # BCM is configured if prolog/epilog point to the correct directories
+            # The output has newlines between values, so we check each line
+            lines = stdout.strip().split('\n')
+            prolog_line = lines[0] if len(lines) > 0 else ""
+            epilog_line = lines[1] if len(lines) > 1 else ""
+            epilogslurmctld_line = lines[2] if len(lines) > 2 else ""
+            
+            prolog_configured = "/cm/local/apps/cmd/scripts/prolog" in prolog_line
+            epilog_configured = "/cm/local/apps/cmd/scripts/epilog" in epilog_line
+            results["BCM prolog/epilog configured"] = prolog_configured and epilog_configured
+            results["BCM epilogslurmctld configured"] = "/usr/local/sbin/slurmctldepilog.sh" in epilogslurmctld_line
         else:
             results["BCM prolog/epilog configured"] = False
             results["BCM epilogslurmctld configured"] = False
         
         # Check if jobstats scripts are properly installed
-        prolog_script = "/cm/local/apps/slurm/var/prologs/60-prolog-jobstats.sh"
-        epilog_script = "/cm/local/apps/slurm/var/epilogs/60-epilog-jobstats.sh"
+        # Shared scripts should exist on the slurm controller
         shared_prolog = "/cm/shared/apps/slurm/var/cm/prolog-jobstats.sh"
         shared_epilog = "/cm/shared/apps/slurm/var/cm/epilog-jobstats.sh"
         
-        results["Prolog script symlink exists"] = self._check_file_exists(prolog_script, host)
-        results["Epilog script symlink exists"] = self._check_file_exists(epilog_script, host)
         results["Shared prolog script exists"] = self._check_file_exists(shared_prolog, host)
         results["Shared epilog script exists"] = self._check_file_exists(shared_epilog, host)
         
@@ -187,6 +193,22 @@ class JobstatsValidator:
             results["Epilog script executable"] = success
         else:
             results["Epilog script executable"] = False
+        
+        # Check symlinks on BCM headnode and login nodes (nodes that submit jobs)
+        prolog_script = "/cm/local/apps/slurm/var/prologs/60-prolog-jobstats.sh"
+        epilog_script = "/cm/local/apps/slurm/var/epilogs/60-epilog-jobstats.sh"
+        
+        # Check symlinks on BCM headnode (localhost)
+        headnode_prolog = self._check_file_exists(prolog_script, None)  # localhost
+        headnode_epilog = self._check_file_exists(epilog_script, None)  # localhost
+        
+        # Check symlinks on login nodes
+        login_nodes = self.config['systems'].get('login_nodes', [])
+        login_prolog = all(self._check_file_exists(prolog_script, login_host) for login_host in login_nodes) if login_nodes else True
+        login_epilog = all(self._check_file_exists(epilog_script, login_host) for login_host in login_nodes) if login_nodes else True
+        
+        results["Prolog script symlink exists"] = headnode_prolog and login_prolog
+        results["Epilog script symlink exists"] = headnode_epilog and login_epilog
         
         return results
     
@@ -215,7 +237,7 @@ class JobstatsValidator:
         
         # Define services by host type
         service_checks = {
-            'dgx_nodes': ['cgroup_exporter', 'node_exporter', 'nvidia_gpu_prometheus_exporter'],
+            'dgx_nodes': ['cgroup_exporter', 'node_exporter', 'nvidia_gpu_exporter'],
             'prometheus_server': ['prometheus'],
             'grafana_server': ['grafana-server']
         }
@@ -334,8 +356,8 @@ class JobstatsValidator:
         # Check GPU tracking scripts on DGX nodes
         dgx_nodes = self.config['systems'].get('dgx_nodes', [])
         for host in dgx_nodes:
-            prolog_exists = self._check_file_exists("/etc/slurm/prolog.d/gpustats_helper.sh", host)
-            epilog_exists = self._check_file_exists("/etc/slurm/epilog.d/gpustats_helper.sh", host)
+            prolog_exists = self._check_file_exists("/cm/local/apps/slurm/var/prologs/60-prolog-jobstats.sh", host)
+            epilog_exists = self._check_file_exists("/cm/local/apps/slurm/var/epilogs/60-epilog-jobstats.sh", host)
             
             self._test_result(
                 f"GPU prolog script on {host}",
@@ -364,8 +386,8 @@ class JobstatsValidator:
         print(f"\n{Colors.BOLD}6. Checking BCM Slurm Configuration{Colors.END}")
         print("=" * 50)
         
-        slurm_controller = self.config['systems']['slurm_controller'][0]
-        settings = self._check_bcm_slurm_configuration(slurm_controller)
+        # BCM commands should be run on the BCM headnode (localhost), not slurm_controller
+        settings = self._check_bcm_slurm_configuration(None)  # None = localhost
         
         for setting, exists in settings.items():
             self._test_result(
@@ -395,22 +417,70 @@ class JobstatsValidator:
                     print(f"    Version: {stdout.strip()}")
     
     def validate_bcm_requirements(self):
-        """Display BCM configuration requirements."""
+        """Validate BCM configuration requirements that should be automated."""
         print(f"\n{Colors.BOLD}8. BCM Configuration Requirements{Colors.END}")
         print("=" * 50)
         
-        print(f"{Colors.YELLOW}⚠️  The following settings need to be added to slurm.conf via BCM:{Colors.END}")
-        print("   Prolog=/etc/slurm/prolog.d/*.sh")
-        print("   Epilog=/etc/slurm/epilog.d/*.sh")
-        print("   EpilogSlurmctld=/usr/local/sbin/slurmctldepilog.sh")
-        print()
-        print("   Additionally, ensure these cgroup settings are present:")
-        print("   JobAcctGatherType=jobacct_gather/cgroup")
-        print("   ProctrackType=proctrack/cgroup")
-        print("   TaskPlugin=affinity,cgroup")
+        slurm_controller = self.config['systems']['slurm_controller'][0]
         
-        self.results['warnings'] += 1
-        self.results['total'] += 1
+        # Check slurm.conf cgroup settings
+        cluster_name = self.config.get('cluster_name', 'slurm')
+        slurm_conf_path = f"/cm/shared/apps/slurm/var/etc/{cluster_name}/slurm.conf"
+        
+        cgroup_settings = {
+            'JobAcctGatherType': 'jobacct_gather/cgroup',
+            'ProctrackType': 'proctrack/cgroup', 
+            'TaskPlugin': 'affinity,cgroup'
+        }
+        
+        print(f"Checking slurm.conf cgroup settings in {slurm_conf_path}...")
+        for setting, expected_value in cgroup_settings.items():
+            success, stdout, stderr = self._run_command(
+                f"grep '^{setting}\\s*=' {slurm_conf_path} | head -1", 
+                slurm_controller
+            )
+            if success and expected_value in stdout:
+                self._test_result(
+                    f"slurm.conf: {setting}",
+                    True,
+                    f"Correctly set to {expected_value}"
+                )
+            else:
+                self._test_result(
+                    f"slurm.conf: {setting}",
+                    False,
+                    f"Not set to {expected_value} or missing"
+                )
+        
+        # Check BCM category service management
+        slurm_category = self.config.get('slurm_category', 'dgx')
+        kubernetes_category = self.config.get('kubernetes_category', 'runai')
+        
+        print(f"\nChecking BCM category service management...")
+        
+        # Check if services are configured in Slurm category
+        for service in ['cgroup_exporter', 'node_exporter', 'nvidia_gpu_exporter']:
+            success, stdout, stderr = self._run_command(
+                f'cmsh -c "category; use {slurm_category}; services; list" | grep {service}',
+                None  # Run locally on BCM headnode
+            )
+            self._test_result(
+                f"BCM: {service} in {slurm_category} category",
+                success,
+                "Service configured" if success else "Service not configured"
+            )
+        
+        # Check if services are configured in Kubernetes category (should be disabled)
+        for service in ['cgroup_exporter', 'node_exporter', 'nvidia_gpu_exporter']:
+            success, stdout, stderr = self._run_command(
+                f'cmsh -c "category; use {kubernetes_category}; services; list" | grep {service}',
+                None  # Run locally on BCM headnode
+            )
+            self._test_result(
+                f"BCM: {service} in {kubernetes_category} category",
+                success,
+                "Service configured (should be disabled)" if success else "Service not configured"
+            )
     
     def generate_report(self):
         """Generate a summary report."""
