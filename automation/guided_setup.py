@@ -1530,7 +1530,8 @@ Examples:
     parser.add_argument(
         '--config',
         type=str,
-        help='Path to configuration JSON file'
+        default='automation/configs/config.json',
+        help='Path to configuration JSON file (default: automation/configs/config.json)'
     )
     
     parser.add_argument(

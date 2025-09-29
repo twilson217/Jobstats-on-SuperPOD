@@ -445,7 +445,7 @@ def main():
     parser.add_argument(
         "--config", 
         default="automation/configs/config.json",
-        help="Path to configuration file"
+        help="Path to configuration file (default: automation/configs/config.json)"
     )
     parser.add_argument(
         "--verbose", "-v",
