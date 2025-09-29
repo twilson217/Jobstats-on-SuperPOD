@@ -58,16 +58,10 @@ Thumbs.db
 *.temp
 
 # Automation specific
-automation/logs/*.log
-automation/logs/*.tmp
-automation/logs/*.temp
-automation/logs/dry-run-output.txt
+automation/logs/
 
 # Config files (user-specific)
 automation/configs/config.json
-
-# Keep the logs directory but ignore most contents
-!automation/logs/.gitkeep
 
 # BCM documentation text files (generated content)
 .bcm-documentation-text/
