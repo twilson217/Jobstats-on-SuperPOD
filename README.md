@@ -13,9 +13,49 @@ Jobstats is a comprehensive job monitoring platform designed for CPU and GPU clu
 
 ## Deployment Options
 
-This repository provides two approaches for deploying jobstats on your DGX SuperPOD:
+This repository provides three approaches for deploying jobstats on your DGX SuperPOD:
 
-### 1. Manual Step-by-Step Deployment
+### 1. Quick Setup with Guided Installation
+
+For the easiest deployment experience with interactive configuration:
+
+🚀 **[Quick Setup](setup.sh)** - Interactive setup script with guided configuration
+
+The quick setup provides:
+- Automatic `uv` installation and configuration
+- Interactive `config.json` generation
+- Guided setup script integration
+- One-command deployment with full automation or dry-run options
+
+**Usage:**
+```bash
+chmod +x setup.sh
+./setup.sh
+```
+
+### 2. Interactive Guided Setup
+
+For step-by-step guided deployment with full control and documentation:
+
+📋 **[Guided Setup](automation/guided_setup.py)** - Interactive guided deployment with progress tracking
+
+The guided setup provides:
+- Step-by-step interactive deployment following Princeton University's documentation
+- Progress tracking and resumption capabilities
+- Comprehensive documentation generation
+- Full automation or dry-run modes
+- BCM-specific configuration and validation
+
+**Usage:**
+```bash
+# Full automated deployment
+uv run python automation/guided_setup.py --config automation/configs/config.json
+
+# Dry-run with documentation generation
+uv run python automation/guided_setup.py --config automation/configs/config.json --dry-run
+```
+
+### 3. Manual Step-by-Step Deployment
 
 For complete control over each step of the deployment process, follow the comprehensive manual guide:
 
@@ -29,7 +69,7 @@ This guide covers:
 - Network and firewall configuration
 - Verification and troubleshooting
 
-### 2. Automated Deployment
+### 4. Automated Deployment
 
 For streamlined deployment using Python automation scripts:
 
@@ -45,6 +85,35 @@ The automation provides:
 
 ## Quick Start
 
+### For Quick Setup (Recommended)
+1. Clone the repository:
+   ```bash
+   git clone <repository-url>
+   cd jobstats-on-superpod
+   ```
+2. Run the interactive setup:
+   ```bash
+   chmod +x setup.sh
+   ./setup.sh
+   ```
+3. Follow the prompts to configure and deploy jobstats
+
+### For Guided Setup
+1. Clone the repository and install dependencies:
+   ```bash
+   git clone <repository-url>
+   cd jobstats-on-superpod
+   uv sync
+   ```
+2. Run the guided setup:
+   ```bash
+   # Full automated deployment
+   uv run python automation/guided_setup.py --config automation/configs/config.json
+   
+   # Or dry-run with documentation generation
+   uv run python automation/guided_setup.py --config automation/configs/config.json --dry-run
+   ```
+
 ### For Manual Deployment
 1. Read the [How-to Guide](how-to.md)
 2. Follow the step-by-step instructions for your environment
@@ -57,6 +126,33 @@ The automation provides:
    cd automation
    python deploy_jobstats.py --config config.json
    ```
+
+## New Features
+
+### 🚀 Quick Setup Script (`setup.sh`)
+- **Interactive Configuration**: Guides you through setting up `uv` and generating `config.json`
+- **Smart Detection**: Checks for existing installations and configurations
+- **Guided Integration**: Optionally runs the guided setup script after configuration
+- **One-Command Deployment**: Complete setup from zero to deployed jobstats
+
+### 📋 Guided Setup Script (`automation/guided_setup.py`)
+- **Interactive Deployment**: Step-by-step guided deployment following Princeton University's documentation
+- **Progress Tracking**: Saves progress and allows resumption if interrupted
+- **Documentation Generation**: Creates comprehensive deployment documentation at `automation/logs/guided_setup_document.md`
+- **Dry-Run Mode**: Preview all commands before execution
+- **BCM Integration**: Proper BCM configuration and validation
+
+### 📄 Generated Documentation
+- **Comprehensive Guide**: `automation/logs/guided_setup_document.md` contains complete deployment instructions
+- **Manual Reference**: Perfect for manual deployment or troubleshooting
+- **Command Reference**: All commands grouped by host and section
+- **BCM-Specific**: Includes BCM imaging instructions and category management
+
+### 🔍 Validation Script (`automation/tools/validate_jobstats_deployment.py`)
+- **Comprehensive Testing**: Validates all components and configurations
+- **BCM-Aware**: Checks BCM-specific configurations and paths
+- **Service Validation**: Verifies all services are running correctly
+- **Metrics Testing**: Tests all metrics endpoints and Prometheus targets
 
 ## Configuration Files
 

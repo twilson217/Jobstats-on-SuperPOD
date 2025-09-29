@@ -4,6 +4,10 @@ This project provides automated deployment of Princeton University's jobstats mo
 
 ## Features
 
+- **🚀 Quick Setup**: Interactive `setup.sh` script for one-command deployment
+- **📋 Guided Setup**: Step-by-step interactive deployment with progress tracking
+- **📄 Documentation Generation**: Creates comprehensive deployment documentation
+- **🔍 Validation Script**: Comprehensive testing and validation of all components
 - **BCM Integration**: Uses `cmsh` to verify configurations and follows BCM best practices
 - **Symlink Pattern**: Implements BCM's shared storage symlink pattern for script management
 - **Shared Host Support**: Intelligently handles shared systems (e.g., same node for Slurm controller and login)
@@ -21,6 +25,57 @@ This project provides automated deployment of Princeton University's jobstats mo
 - Internet access for downloading components
 
 ## Quick Start
+
+### Option 1: Quick Setup (Recommended)
+
+1. **Clone the repository**:
+   ```bash
+   git clone <repository-url>
+   cd jobstats-on-superpod
+   ```
+
+2. **Run the interactive setup**:
+   ```bash
+   chmod +x setup.sh
+   ./setup.sh
+   ```
+
+3. **Follow the prompts** to configure and deploy jobstats automatically
+
+### Option 2: Guided Setup
+
+1. **Install uv** (if not already installed):
+   ```bash
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   ```
+
+2. **Make uv available in your current shell**:
+   ```bash
+   source ~/.bashrc
+   ```
+   
+   **Verify uv is working**:
+   ```bash
+   uv --version
+   ```
+
+3. **Clone and setup the project**:
+   ```bash
+   git clone <repository-url>
+   cd jobstats-on-superpod
+   uv sync
+   ```
+
+4. **Run the guided setup**:
+   ```bash
+   # Full automated deployment
+   uv run python automation/guided_setup.py --config automation/configs/config.json
+   
+   # Or dry-run with documentation generation
+   uv run python automation/guided_setup.py --config automation/configs/config.json --dry-run
+   ```
+
+### Option 3: Traditional Automation
 
 1. **Install uv** (if not already installed):
    ```bash
@@ -66,6 +121,115 @@ This project provides automated deployment of Princeton University's jobstats mo
    ```bash
    uv run python automation/deploy_jobstats.py --config config.json
    ```
+
+## New Features
+
+### 🚀 Quick Setup Script (`setup.sh`)
+
+The quick setup script provides the easiest way to get started:
+
+- **Interactive Configuration**: Guides you through setting up `uv` and generating `config.json`
+- **Smart Detection**: Checks for existing installations and configurations
+- **Guided Integration**: Optionally runs the guided setup script after configuration
+- **One-Command Deployment**: Complete setup from zero to deployed jobstats
+
+**Usage:**
+```bash
+chmod +x setup.sh
+./setup.sh
+```
+
+### 📋 Guided Setup Script (`automation/guided_setup.py`)
+
+The guided setup script provides step-by-step interactive deployment:
+
+- **Interactive Deployment**: Follows Princeton University's documentation flow
+- **Progress Tracking**: Saves progress and allows resumption if interrupted
+- **Documentation Generation**: Creates comprehensive deployment documentation
+- **Dry-Run Mode**: Preview all commands before execution
+- **BCM Integration**: Proper BCM configuration and validation
+
+**Usage:**
+```bash
+# Full automated deployment
+uv run python automation/guided_setup.py --config automation/configs/config.json
+
+# Dry-run with documentation generation
+uv run python automation/guided_setup.py --config automation/configs/config.json --dry-run
+
+# Resume interrupted deployment
+uv run python automation/guided_setup.py --config automation/configs/config.json --resume
+```
+
+**Features:**
+- **10 Comprehensive Sections**: Covers all aspects of jobstats deployment
+- **Progress Persistence**: Saves progress to `automation/logs/guided_setup_progress.json`
+- **Documentation Output**: Generates `automation/logs/guided_setup_document.md`
+- **BCM-Specific**: Includes BCM imaging instructions and category management
+- **Error Recovery**: Can resume from any point if interrupted
+
+### 📄 Generated Documentation
+
+The guided setup creates comprehensive documentation at `automation/logs/guided_setup_document.md`:
+
+- **Complete Deployment Guide**: All commands grouped by host and section
+- **Manual Reference**: Perfect for manual deployment or troubleshooting
+- **BCM-Specific Instructions**: Includes BCM imaging and category management
+- **Command Reference**: All commands with proper formatting and comments
+
+### 🔍 Validation Script (`automation/tools/validate_jobstats_deployment.py`)
+
+The validation script provides comprehensive testing and validation:
+
+- **Service Validation**: Checks all systemd services are running
+- **Port Testing**: Verifies all required ports are listening
+- **Metrics Testing**: Tests all metrics endpoints and Prometheus targets
+- **BCM Configuration**: Validates BCM-specific configurations
+- **Slurm Integration**: Checks prolog/epilog scripts and jobstats command
+- **Comprehensive Reporting**: Detailed test results with pass/fail status
+
+**Usage:**
+```bash
+# Validate deployment
+uv run python automation/tools/validate_jobstats_deployment.py
+
+# Validate with custom config
+uv run python automation/tools/validate_jobstats_deployment.py --config my_config.json
+```
+
+**Test Coverage:**
+- ✅ Systemd Services (5 tests)
+- ✅ Service Ports (5 tests)
+- ✅ Metrics Endpoints (3 tests)
+- ✅ Prometheus Targets (1 test)
+- ✅ Slurm Integration (3 tests)
+- ✅ BCM Configuration (8 tests)
+- ✅ Jobstats Command (1 test)
+- ✅ BCM Requirements (9 tests)
+
+**Total: 35 comprehensive tests**
+
+### 📋 Guided Setup Sections
+
+The guided setup script follows Princeton University's documentation and includes 10 comprehensive sections:
+
+1. **Setup Overview** - Introduction and system requirements
+2. **CPU Job Statistics** - Slurm cgroup configuration and cgroup_exporter
+3. **GPU Job Statistics** - NVIDIA GPU exporter and prolog/epilog scripts
+4. **Node Statistics** - Node exporter for system metrics
+5. **Job Summaries** - Slurmctld epilog and BCM configuration
+6. **Prometheus** - Time series database installation and configuration
+7. **Grafana** - Web interface installation and setup
+8. **Open OnDemand Jobstats Helper** - OOD integration (optional)
+9. **The jobstats Command** - Command-line tool installation
+10. **Additional BCM Configurations** - BCM imaging and category management
+
+Each section includes:
+- **Interactive Prompts**: User confirmation before each step
+- **Progress Tracking**: Saves progress for resumption
+- **Documentation Generation**: Creates comprehensive deployment guide
+- **BCM Integration**: Proper BCM configuration and validation
+- **Error Handling**: Graceful error recovery and reporting
 
 ## Configuration
 
