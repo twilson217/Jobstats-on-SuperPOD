@@ -47,13 +47,16 @@ class Colors:
 class GuidedJobstatsSetup:
     """Interactive guided setup for BCM jobstats deployment."""
     
-    def __init__(self, resume: bool = False, config_file: Optional[str] = None):
+    def __init__(self, resume: bool = False, config_file: Optional[str] = None, dry_run: bool = False):
         self.resume = resume
         self.config_file = config_file
+        self.dry_run = dry_run
         self.config = self._load_config()
         self.progress_file = Path("automation/logs/guided_setup_progress.json")
         self.progress = self._load_progress()
         self.working_dir = Path("/opt/jobstats-deployment")
+        self.document_file = Path("automation/logs/guided_setup_document.md")
+        self.document_content = []
         
         # Repository URLs
         self.repositories = {
@@ -171,6 +174,40 @@ class GuidedJobstatsSetup:
         with open(self.progress_file, 'w') as f:
             json.dump(self.progress, f, indent=2)
 
+    def _add_to_document(self, content: str):
+        """Add content to the document."""
+        self.document_content.append(content)
+
+    def _save_document(self):
+        """Save the complete document to file."""
+        self.document_file.parent.mkdir(exist_ok=True)
+        with open(self.document_file, 'w') as f:
+            f.write('\n'.join(self.document_content))
+
+    def _init_document(self):
+        """Initialize the document with header and metadata."""
+        timestamp = subprocess.run(['date'], capture_output=True, text=True).stdout.strip()
+        
+        self._add_to_document("# BCM Jobstats Guided Setup Document")
+        self._add_to_document("")
+        self._add_to_document(f"**Generated on:** {timestamp}")
+        self._add_to_document(f"**Mode:** {'Dry Run' if self.dry_run else 'Live Execution'}")
+        self._add_to_document(f"**Configuration:** {self.config_file or 'Default'}")
+        self._add_to_document("")
+        self._add_to_document("This document provides a complete record of the jobstats deployment process.")
+        self._add_to_document("It can be used as a reference for what was done or as a manual implementation guide.")
+        self._add_to_document("")
+        self._add_to_document("## Table of Contents")
+        self._add_to_document("")
+        
+        for i, section in enumerate(self.setup_sections, 1):
+            section_id = section['id'].replace('_', '-')
+            self._add_to_document(f"{i}. [{section['title']}](#{section_id})")
+        
+        self._add_to_document("")
+        self._add_to_document("---")
+        self._add_to_document("")
+
     def _print_header(self, title: str, description: str = ""):
         """Print a formatted section header."""
         print(f"\n{Colors.BOLD}{Colors.CYAN}{'='*80}{Colors.END}")
@@ -219,9 +256,47 @@ class GuidedJobstatsSetup:
             logger.error(f"Error executing command '{command}' on {host or 'localhost'}: {e}")
             return 1, "", str(e)
 
-    def _execute_commands(self, commands: List[Dict]) -> bool:
+    def _execute_commands(self, commands: List[Dict], section_title: str = "") -> bool:
         """Execute a list of commands with user confirmation."""
         if not commands:
+            return True
+        
+        # Add commands to document
+        if section_title:
+            self._add_to_document(f"### Commands for {section_title}")
+            self._add_to_document("")
+        
+        # Group commands by host
+        commands_by_host = {}
+        for cmd in commands:
+            host = cmd.get('host', 'localhost')
+            if host not in commands_by_host:
+                commands_by_host[host] = []
+            commands_by_host[host].append(cmd)
+        
+        # Add commands to document grouped by host
+        for host, host_commands in commands_by_host.items():
+            self._add_to_document(f"#### Host: {host}")
+            self._add_to_document("")
+            for i, cmd in enumerate(host_commands, 1):
+                description = cmd.get('description', '')
+                command = cmd['command']
+                if description:
+                    self._add_to_document(f"**{i}. {description}**")
+                else:
+                    self._add_to_document(f"**{i}. Command**")
+                self._add_to_document("")
+                self._add_to_document("```bash")
+                self._add_to_document(command)
+                self._add_to_document("```")
+                self._add_to_document("")
+            self._add_to_document("---")
+            self._add_to_document("")
+        
+        if self.dry_run:
+            print(f"\n{Colors.BOLD}{Colors.YELLOW}[DRY RUN] Commands would be executed:{Colors.END}")
+            self._print_command_summary(commands)
+            print(f"\n{Colors.BLUE}Commands have been added to the document.{Colors.END}")
             return True
             
         self._print_command_summary(commands)
@@ -263,6 +338,30 @@ class GuidedJobstatsSetup:
             "Introduction to the jobstats platform setup process"
         )
         
+        # Add to document
+        self._add_to_document("## 1. Setup Overview")
+        self._add_to_document("")
+        self._add_to_document("### Description")
+        self._add_to_document("")
+        self._add_to_document("The jobstats platform provides comprehensive job monitoring for Slurm clusters.")
+        self._add_to_document("This guided setup will walk you through each step of the deployment process.")
+        self._add_to_document("")
+        self._add_to_document("### Setup Process Overview")
+        self._add_to_document("")
+        self._add_to_document("1. Switch to cgroup-based job accounting")
+        self._add_to_document("2. Setup exporters (cgroup, node, GPU) on compute nodes")
+        self._add_to_document("3. Setup prolog/epilog scripts on GPU nodes")
+        self._add_to_document("4. Setup Prometheus server and configuration")
+        self._add_to_document("5. Setup slurmctld epilog for job summaries")
+        self._add_to_document("6. Configure Grafana interface")
+        self._add_to_document("7. Install jobstats command-line tool")
+        self._add_to_document("")
+        self._add_to_document("### Reference Documentation")
+        self._add_to_document("")
+        self._add_to_document("- Princeton University: https://princetonuniversity.github.io/jobstats/setup/overview/")
+        self._add_to_document("- Local documentation: .jobstats/jobstats/docs/setup/overview.md")
+        self._add_to_document("")
+        
         print(f"{Colors.BLUE}The jobstats platform provides comprehensive job monitoring for Slurm clusters.{Colors.END}")
         print(f"{Colors.BLUE}This guided setup will walk you through each step of the deployment process.{Colors.END}")
         
@@ -279,7 +378,10 @@ class GuidedJobstatsSetup:
         print(f"• Princeton University: https://princetonuniversity.github.io/jobstats/setup/overview/")
         print(f"• Local documentation: .jobstats/jobstats/docs/setup/overview.md")
         
-        input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+        if not self.dry_run:
+            input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+        else:
+            print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
 
     def section_cgroups(self):
         """Section 2: CPU Job Statistics (Cgroups)"""
@@ -287,6 +389,41 @@ class GuidedJobstatsSetup:
             "2. CPU Job Statistics (Cgroups)",
             "Configure Slurm for cgroup-based job accounting"
         )
+        
+        # Add to document
+        self._add_to_document("## 2. CPU Job Statistics (Cgroups)")
+        self._add_to_document("")
+        self._add_to_document("### Description")
+        self._add_to_document("")
+        self._add_to_document("This section configures Slurm to use cgroup-based job accounting")
+        self._add_to_document("instead of Linux process accounting for more accurate resource tracking.")
+        self._add_to_document("")
+        self._add_to_document("### What we'll do")
+        self._add_to_document("")
+        self._add_to_document("- Configure slurm.conf for cgroup accounting")
+        self._add_to_document("- Verify cgroup configuration")
+        self._add_to_document("- Test cgroup functionality")
+        self._add_to_document("")
+        self._add_to_document("### Configuration Requirements")
+        self._add_to_document("")
+        self._add_to_document("The following settings must be present in slurm.conf:")
+        self._add_to_document("")
+        self._add_to_document("```")
+        self._add_to_document("JobAcctGatherType=jobacct_gather/cgroup")
+        self._add_to_document("ProctrackType=proctrack/cgroup")
+        self._add_to_document("TaskPlugin=affinity,cgroup")
+        self._add_to_document("```")
+        self._add_to_document("")
+        self._add_to_document("### Manual Configuration Required")
+        self._add_to_document("")
+        self._add_to_document("You will need to manually update slurm.conf with the above settings.")
+        self._add_to_document("After updating, restart Slurm services:")
+        self._add_to_document("")
+        self._add_to_document("```bash")
+        self._add_to_document("systemctl restart slurmctld")
+        self._add_to_document("systemctl restart slurmd")
+        self._add_to_document("```")
+        self._add_to_document("")
         
         print(f"{Colors.BLUE}This section configures Slurm to use cgroup-based job accounting{Colors.END}")
         print(f"{Colors.BLUE}instead of Linux process accounting for more accurate resource tracking.{Colors.END}")
@@ -322,13 +459,16 @@ class GuidedJobstatsSetup:
         print(f"• {Colors.WHITE}systemctl restart slurmctld{Colors.END}")
         print(f"• {Colors.WHITE}systemctl restart slurmd{Colors.END}")
         
-        if self._execute_commands(slurm_controller_commands):
+        if self._execute_commands(slurm_controller_commands, "Cgroup Configuration Check"):
             print(f"\n{Colors.GREEN}✓ Cgroup configuration check completed{Colors.END}")
         else:
             print(f"\n{Colors.RED}✗ Cgroup configuration check failed{Colors.END}")
             return False
         
-        input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+        if not self.dry_run:
+            input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+        else:
+            print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
         return True
 
     def section_gpu_scripts(self):
@@ -384,7 +524,7 @@ class GuidedJobstatsSetup:
                 }
             ])
         
-        if self._execute_commands(gpu_commands):
+        if self._execute_commands(gpu_commands, "GPU Scripts Installation"):
             print(f"\n{Colors.GREEN}✓ GPU scripts installation completed{Colors.END}")
         else:
             print(f"\n{Colors.RED}✗ GPU scripts installation failed{Colors.END}")
@@ -395,7 +535,10 @@ class GuidedJobstatsSetup:
         print(f"• {Colors.WHITE}Prolog=/etc/slurm/prolog.d/*.sh{Colors.END}")
         print(f"• {Colors.WHITE}Epilog=/etc/slurm/epilog.d/*.sh{Colors.END}")
         
-        input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+        if not self.dry_run:
+            input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+        else:
+            print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
         return True
 
     def section_node_stats(self):
@@ -780,7 +923,12 @@ scrape_configs:
         """Run the complete guided setup process."""
         print(f"{Colors.BOLD}{Colors.PURPLE}{'='*80}{Colors.END}")
         print(f"{Colors.BOLD}{Colors.WHITE}BCM Jobstats Guided Setup{Colors.END}")
+        if self.dry_run:
+            print(f"{Colors.BOLD}{Colors.YELLOW}[DRY RUN MODE]{Colors.END}")
         print(f"{Colors.BOLD}{Colors.PURPLE}{'='*80}{Colors.END}")
+        
+        # Initialize document
+        self._init_document()
         
         if self.resume and self.progress['current_section'] > 0:
             print(f"\n{Colors.YELLOW}Resuming from section {self.progress['current_section'] + 1}{Colors.END}")
@@ -806,23 +954,40 @@ scrape_configs:
                     print(f"\n{Colors.GREEN}✓ Section {i+1} completed successfully{Colors.END}")
                 else:
                     print(f"\n{Colors.RED}✗ Section {i+1} failed{Colors.END}")
-                    print(f"{Colors.YELLOW}You can resume from this section later using --resume{Colors.END}")
+                    if not self.dry_run:
+                        print(f"{Colors.YELLOW}You can resume from this section later using --resume{Colors.END}")
                     return False
             else:
                 print(f"{Colors.RED}Section {section_id} not implemented{Colors.END}")
                 return False
         
+        # Save final document
+        self._save_document()
+        
         # Final summary
         print(f"\n{Colors.BOLD}{Colors.GREEN}{'='*80}{Colors.END}")
-        print(f"{Colors.BOLD}{Colors.WHITE}Setup Complete!{Colors.END}")
+        if self.dry_run:
+            print(f"{Colors.BOLD}{Colors.WHITE}Dry Run Complete!{Colors.END}")
+        else:
+            print(f"{Colors.BOLD}{Colors.WHITE}Setup Complete!{Colors.END}")
         print(f"{Colors.BOLD}{Colors.GREEN}{'='*80}{Colors.END}")
         
         print(f"\n{Colors.BLUE}All sections have been completed successfully.{Colors.END}")
-        print(f"\n{Colors.BOLD}{Colors.WHITE}Next Steps:{Colors.END}")
-        print(f"1. {Colors.CYAN}Test the deployment with a sample job{Colors.END}")
-        print(f"2. {Colors.CYAN}Access Grafana at http://{self.config['grafana_server']}:{self.config['grafana_port']}{Colors.END}")
-        print(f"3. {Colors.CYAN}Test jobstats command: jobstats --help{Colors.END}")
-        print(f"4. {Colors.CYAN}Review the documentation for troubleshooting{Colors.END}")
+        print(f"\n{Colors.BOLD}{Colors.WHITE}Documentation Generated:{Colors.END}")
+        print(f"• {Colors.CYAN}Setup document: {self.document_file}{Colors.END}")
+        print(f"• {Colors.CYAN}This document contains all commands and can be used for manual implementation{Colors.END}")
+        
+        if not self.dry_run:
+            print(f"\n{Colors.BOLD}{Colors.WHITE}Next Steps:{Colors.END}")
+            print(f"1. {Colors.CYAN}Test the deployment with a sample job{Colors.END}")
+            print(f"2. {Colors.CYAN}Access Grafana at http://{self.config['grafana_server']}:{self.config['grafana_port']}{Colors.END}")
+            print(f"3. {Colors.CYAN}Test jobstats command: jobstats --help{Colors.END}")
+            print(f"4. {Colors.CYAN}Review the documentation for troubleshooting{Colors.END}")
+        else:
+            print(f"\n{Colors.BOLD}{Colors.WHITE}Dry Run Summary:{Colors.END}")
+            print(f"1. {Colors.CYAN}Review the generated document: {self.document_file}{Colors.END}")
+            print(f"2. {Colors.CYAN}Use the document to implement the setup manually{Colors.END}")
+            print(f"3. {Colors.CYAN}Run without --dry-run to execute the setup{Colors.END}")
         
         return True
 
@@ -835,6 +1000,9 @@ def main():
 Examples:
     # Run guided setup
     python guided_setup.py
+    
+    # Run dry-run to generate documentation only
+    python guided_setup.py --dry-run
     
     # Resume from where you left off
     python guided_setup.py --resume
@@ -856,16 +1024,25 @@ Examples:
         help='Path to configuration JSON file'
     )
     
+    parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Generate documentation without executing commands'
+    )
+    
     args = parser.parse_args()
     
     # Create guided setup instance
-    setup = GuidedJobstatsSetup(resume=args.resume, config_file=args.config)
+    setup = GuidedJobstatsSetup(resume=args.resume, config_file=args.config, dry_run=args.dry_run)
     
     # Run guided setup
     success = setup.run_guided_setup()
     
     if success:
-        print(f"\n{Colors.GREEN}Guided setup completed successfully!{Colors.END}")
+        if args.dry_run:
+            print(f"\n{Colors.GREEN}Dry run completed successfully!{Colors.END}")
+        else:
+            print(f"\n{Colors.GREEN}Guided setup completed successfully!{Colors.END}")
         sys.exit(0)
     else:
         print(f"\n{Colors.RED}Guided setup failed!{Colors.END}")
