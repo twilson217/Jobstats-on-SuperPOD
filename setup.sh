@@ -131,8 +131,21 @@ main() {
     print_status "Step 2: Installing Python dependencies..."
     
     if [ -f "pyproject.toml" ]; then
-        uv sync
-        print_success "Dependencies installed successfully"
+        # Check if dependencies are already installed
+        if [ -d ".venv" ] && [ -f ".venv/pyvenv.cfg" ]; then
+            print_status "Virtual environment already exists. Checking if dependencies are up to date..."
+            if uv sync --check; then
+                print_success "Dependencies are already up to date"
+            else
+                print_status "Dependencies need updating. Installing..."
+                uv sync
+                print_success "Dependencies updated successfully"
+            fi
+        else
+            print_status "Installing dependencies..."
+            uv sync
+            print_success "Dependencies installed successfully"
+        fi
     else
         print_error "pyproject.toml not found. Are you in the correct directory?"
         exit 1
@@ -220,6 +233,34 @@ main() {
     
     # Ensure config directory exists
     mkdir -p "$config_dir"
+    
+    # Check if config.json already exists
+    if [ -f "$config_file" ]; then
+        echo ""
+        print_warning "Configuration file already exists: $config_file"
+        echo "Current configuration:"
+        cat "$config_file" | head -10
+        echo "..."
+        echo ""
+        read -p "Would you like to overwrite the existing config.json? (y/N): " overwrite_config
+        overwrite_config=$(echo "$overwrite_config" | tr '[:upper:]' '[:lower:]')
+        
+        if [[ "$overwrite_config" != "y" && "$overwrite_config" != "yes" ]]; then
+            print_status "Keeping existing configuration file."
+            print_status "You can manually edit $config_file if needed."
+            echo ""
+            print_status "Next steps:"
+            echo "1. Review your configuration: cat $config_file"
+            echo "2. Run a dry-run deployment:"
+            echo "   uv run python automation/deploy_jobstats.py --config $config_file --dry-run"
+            echo "3. Deploy jobstats:"
+            echo "   uv run python automation/deploy_jobstats.py --config $config_file"
+            echo ""
+            return 0
+        else
+            print_status "Overwriting existing configuration file..."
+        fi
+    fi
     
     # Create the JSON configuration
     cat > "$config_file" << EOF
