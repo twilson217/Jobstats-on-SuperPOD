@@ -43,21 +43,28 @@ This project provides automated deployment of Princeton University's jobstats mo
    cd jobstats-on-superpod
    uv sync
    ```
+   
+   **Note**: All subsequent commands should be run from the project root directory (`jobstats-on-superpod/`).
 
-3. **Configure your systems**:
+4. **Configure your systems**:
    ```bash
-   cp config.json.template config.json
-   # Edit config.json with your actual system hostnames
+   cp automation/configs/config.json.template automation/configs/config.json
+   # Edit automation/configs/config.json with your actual system hostnames
+   ```
+   
+   **Note**: The script will look for config files in `automation/configs/` directory. You can also use any of the example configs:
+   - `config-shared-hosts.json` - For shared host environments
+   - `config-existing-monitoring.json` - For existing Prometheus/Grafana
+   - `config-category-management.json` - For BCM category management
+
+5. **Run a dry-run to preview commands**:
+   ```bash
+   uv run python automation/deploy_jobstats.py --config config.json --dry-run
    ```
 
-4. **Run a dry-run to preview commands**:
+6. **Deploy jobstats**:
    ```bash
-   uv run python deploy_jobstats.py --dry-run
-   ```
-
-5. **Deploy jobstats**:
-   ```bash
-   uv run python deploy_jobstats.py --config config.json
+   uv run python automation/deploy_jobstats.py --config config.json
    ```
 
 ## Configuration
@@ -219,13 +226,13 @@ For BCM-managed systems, deploy jobstats on one representative node of each type
 #### 1. Deploy on Representative Nodes
 ```bash
 # Deploy on one DGX node
-python3 deploy_jobstats.py --config config.json
+uv run python automation/deploy_jobstats.py --config config.json
 
 # Deploy on one Slurm controller  
-python3 deploy_jobstats.py --config config.json
+uv run python automation/deploy_jobstats.py --config config.json
 
 # Deploy on one login node
-python3 deploy_jobstats.py --config config.json
+uv run python automation/deploy_jobstats.py --config config.json
 ```
 
 #### 2. Capture Images
@@ -249,18 +256,25 @@ BCM will automatically deploy the captured images to all nodes of the same type.
 
 ### Dry Run
 ```bash
-uv run python deploy_jobstats.py --dry-run
+uv run python automation/deploy_jobstats.py --config config.json --dry-run
 ```
 This creates a `dry-run-output.txt` file with all commands that would be executed.
 
 ### Custom Configuration
 ```bash
-uv run python deploy_jobstats.py --config my_cluster_config.json
+uv run python automation/deploy_jobstats.py --config my_cluster_config.json
 ```
 
-### Default Configuration
+### Using Example Configurations
 ```bash
-uv run python deploy_jobstats.py
+# For shared host environments
+uv run python automation/deploy_jobstats.py --config config-shared-hosts.json
+
+# For existing monitoring infrastructure
+uv run python automation/deploy_jobstats.py --config config-existing-monitoring.json
+
+# For BCM category management
+uv run python automation/deploy_jobstats.py --config config-category-management.json
 ```
 
 ## Development
@@ -277,8 +291,8 @@ uv run pytest
 
 ### Code Formatting
 ```bash
-uv run black deploy_jobstats.py
-uv run flake8 deploy_jobstats.py
+uv run black automation/deploy_jobstats.py
+uv run flake8 automation/deploy_jobstats.py
 ```
 
 ## Manual Configuration for Existing Installations
