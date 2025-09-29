@@ -359,7 +359,6 @@ class GuidedJobstatsSetup:
         self._add_to_document("### Reference Documentation")
         self._add_to_document("")
         self._add_to_document("- Princeton University: https://princetonuniversity.github.io/jobstats/setup/overview/")
-        self._add_to_document("- Local documentation: .jobstats/jobstats/docs/setup/overview.md")
         self._add_to_document("")
         
         print(f"{Colors.BLUE}The jobstats platform provides comprehensive job monitoring for Slurm clusters.{Colors.END}")
@@ -376,7 +375,6 @@ class GuidedJobstatsSetup:
         
         print(f"\n{Colors.BOLD}{Colors.GREEN}Reference Documentation:{Colors.END}")
         print(f"• Princeton University: https://princetonuniversity.github.io/jobstats/setup/overview/")
-        print(f"• Local documentation: .jobstats/jobstats/docs/setup/overview.md")
         
         if not self.dry_run:
             input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
