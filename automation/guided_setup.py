@@ -382,6 +382,8 @@ class GuidedJobstatsSetup:
             input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
         else:
             print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
+        
+        return True
 
     def section_cgroups(self):
         """Section 2: CPU Job Statistics (Cgroups)"""
@@ -590,7 +592,10 @@ class GuidedJobstatsSetup:
             print(f"\n{Colors.RED}✗ Node exporter installation failed{Colors.END}")
             return False
         
-        input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+        if not self.dry_run:
+            input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+        else:
+            print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
         return True
 
     def section_summaries(self):
@@ -632,7 +637,10 @@ class GuidedJobstatsSetup:
         print(f"Add the following to your slurm.conf:")
         print(f"• {Colors.WHITE}EpilogSlurmctld=/usr/local/sbin/slurmctldepilog.sh{Colors.END}")
         
-        input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+        if not self.dry_run:
+            input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+        else:
+            print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
         return True
 
     def section_prometheus(self):
@@ -694,7 +702,10 @@ class GuidedJobstatsSetup:
         # Create Prometheus configuration
         self._create_prometheus_config()
         
-        input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+        if not self.dry_run:
+            input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+        else:
+            print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
         return True
 
     def _create_prometheus_config(self):
@@ -812,7 +823,10 @@ scrape_configs:
         print(f"3. Add Prometheus data source: http://{self.config['prometheus_server']}:{self.config['prometheus_port']}")
         print(f"4. Import jobstats dashboard from .jobstats/jobstats/grafana/")
         
-        input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+        if not self.dry_run:
+            input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+        else:
+            print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
         return True
 
     def section_ood(self):
@@ -855,7 +869,10 @@ scrape_configs:
         print(f"• {Colors.WHITE}{self.working_dir}/jobstats/ood-jobstats-helper/{Colors.END}")
         print(f"• Follow the README in that directory for OOD integration")
         
-        input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+        if not self.dry_run:
+            input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
+        else:
+            print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
         return True
 
     def section_jobstats_command(self):
@@ -916,7 +933,10 @@ scrape_configs:
         print(f"• {Colors.WHITE}PROM_SERVER = \"http://{self.config['prometheus_server']}:{self.config['prometheus_port']}\"{Colors.END}")
         print(f"• {Colors.WHITE}PROM_RETENTION_DAYS = {self.config['prometheus_retention_days']}{Colors.END}")
         
-        input(f"\n{Colors.YELLOW}Press Enter to continue...{Colors.END}")
+        if not self.dry_run:
+            input(f"\n{Colors.YELLOW}Press Enter to continue...{Colors.END}")
+        else:
+            print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
         return True
 
     def run_guided_setup(self):
