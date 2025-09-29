@@ -405,6 +405,7 @@ class GuidedJobstatsSetup:
         self._add_to_document("- Update slurm.conf with required cgroup settings")
         self._add_to_document("- Install cgroup_exporter on compute nodes")
         self._add_to_document("- Create systemd service for cgroup_exporter")
+        self._add_to_document("- Verify cgroup_exporter is running and collecting metrics")
         self._add_to_document("")
         self._add_to_document("### Required slurm.conf Settings")
         self._add_to_document("")
@@ -434,6 +435,7 @@ class GuidedJobstatsSetup:
         print(f"• Update slurm.conf with required cgroup settings")
         print(f"• Install cgroup_exporter on compute nodes")
         print(f"• Create systemd service for cgroup_exporter")
+        print(f"• Verify cgroup_exporter is running and collecting metrics")
         
         # Get slurm controller host
         slurm_controller = self.config['systems']['slurm_controller'][0] if self.config['systems']['slurm_controller'] else 'slurm-controller'
@@ -540,15 +542,43 @@ EOF''',
             print(f"\n{Colors.RED}✗ Failed to install cgroup_exporter{Colors.END}")
             return False
         
+        # Step 4: Verify cgroup_exporter installation
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 4: Verifying cgroup_exporter installation{Colors.END}")
+        
+        verify_commands = []
+        for dgx_node in self.config['systems']['dgx_nodes']:
+            verify_commands.extend([
+                {
+                    'host': dgx_node,
+                    'command': 'systemctl is-active cgroup_exporter',
+                    'description': f'Check cgroup_exporter service status on {dgx_node}'
+                },
+                {
+                    'host': dgx_node,
+                    'command': f'curl -s http://localhost:{self.config["cgroup_exporter_port"]}/metrics | head -5',
+                    'description': f'Test cgroup_exporter metrics endpoint on {dgx_node}'
+                },
+                {
+                    'host': dgx_node,
+                    'command': f'netstat -tlnp | grep :{self.config["cgroup_exporter_port"]} || ss -tlnp | grep :{self.config["cgroup_exporter_port"]}',
+                    'description': f'Verify cgroup_exporter is listening on port {self.config["cgroup_exporter_port"]} on {dgx_node}'
+                }
+            ])
+        
+        if not self._execute_commands(verify_commands, "Cgroup Exporter Verification"):
+            print(f"\n{Colors.RED}✗ Failed to verify cgroup_exporter installation{Colors.END}")
+            return False
+        
         print(f"\n{Colors.BOLD}{Colors.GREEN}✓ Cgroup configuration and exporter installation completed{Colors.END}")
+        print(f"{Colors.BOLD}{Colors.GREEN}✓ Cgroup_exporter verification completed{Colors.END}")
         
         print(f"\n{Colors.BOLD}{Colors.YELLOW}Next Steps:{Colors.END}")
         print(f"1. Restart Slurm services to apply cgroup configuration:")
         print(f"   • {Colors.WHITE}systemctl restart slurmctld{Colors.END}")
         print(f"   • {Colors.WHITE}systemctl restart slurmd{Colors.END}")
-        print(f"2. Verify cgroup_exporter is running:")
+        print(f"2. Verify cgroup_exporter is running (already checked):")
         print(f"   • {Colors.WHITE}systemctl status cgroup_exporter{Colors.END}")
-        print(f"3. Check metrics endpoint:")
+        print(f"3. Check metrics endpoint (already tested):")
         print(f"   • {Colors.WHITE}curl http://localhost:{self.config['cgroup_exporter_port']}/metrics{Colors.END}")
         
         if not self.dry_run:
