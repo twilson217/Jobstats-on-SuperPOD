@@ -9,6 +9,9 @@ readme = "README.md"
 requires-python = ">=3.8"
 dependencies = []
 
+[tool.hatch.build.targets.wheel]
+packages = ["automation"]
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",

@@ -27,7 +27,17 @@ This project provides automated deployment of Princeton University's jobstats mo
    curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
 
-2. **Clone and setup the project**:
+2. **Make uv available in your current shell**:
+   ```bash
+   source ~/.bashrc
+   ```
+   
+   **Verify uv is working**:
+   ```bash
+   uv --version
+   ```
+
+3. **Clone and setup the project**:
    ```bash
    git clone <repository-url>
    cd jobstats-on-superpod
