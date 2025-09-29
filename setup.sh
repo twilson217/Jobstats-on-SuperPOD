@@ -319,6 +319,41 @@ EOF
     echo ""
     
     print_success "Setup complete! You can now run the deployment script."
+    
+    # Step 7: Offer to run guided setup
+    echo ""
+    print_status "Step 7: Optional Guided Setup"
+    echo ""
+    print_status "Would you like to run the guided setup process?"
+    print_status "This will walk you through the deployment step-by-step with detailed explanations."
+    echo ""
+    read -p "Run guided setup? (y/N): " run_guided_setup
+    run_guided_setup=$(echo "$run_guided_setup" | tr '[:upper:]' '[:lower:]')
+    
+    if [[ "$run_guided_setup" == "y" || "$run_guided_setup" == "yes" ]]; then
+        echo ""
+        print_status "Guided setup options:"
+        echo "1. Full automation - Execute all commands automatically"
+        echo "2. Dry run - Generate documentation only (no commands executed)"
+        echo ""
+        read -p "Choose option (1 or 2): " guided_option
+        
+        if [[ "$guided_option" == "1" ]]; then
+            print_status "Running guided setup with full automation..."
+            echo ""
+            uv run python automation/guided_setup.py --config "$config_file"
+        elif [[ "$guided_option" == "2" ]]; then
+            print_status "Running guided setup in dry-run mode..."
+            echo ""
+            uv run python automation/guided_setup.py --config "$config_file" --dry-run
+            echo ""
+            print_success "Documentation generated! Check automation/logs/guided_setup_document.md"
+        else
+            print_warning "Invalid option. Skipping guided setup."
+        fi
+    else
+        print_status "Skipping guided setup."
+    fi
 }
 
 # Run main function
