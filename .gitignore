@@ -61,6 +61,10 @@ Thumbs.db
 automation/logs/*.log
 automation/logs/*.tmp
 automation/logs/*.temp
+automation/logs/dry-run-output.txt
+
+# Config files (user-specific)
+automation/configs/config.json
 
 # Keep the logs directory but ignore most contents
 !automation/logs/.gitkeep
