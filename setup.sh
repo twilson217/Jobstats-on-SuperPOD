@@ -156,7 +156,7 @@ main() {
     echo ""
     
     # Basic configuration
-    prompt_with_default "Cluster name" "slurm" cluster_name
+    prompt_with_default "BCM wlm cluster name" "slurm" cluster_name
     prompt_with_default "Prometheus server hostname" "prometheus-server" prometheus_server
     prompt_with_default "Grafana server hostname" "grafana-server" grafana_server
     
