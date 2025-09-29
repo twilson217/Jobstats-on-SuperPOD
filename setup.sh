@@ -151,8 +151,48 @@ main() {
         exit 1
     fi
     
-    # Step 3: Collect configuration information
-    print_status "Step 3: Collecting configuration information..."
+    # Step 3: Check for existing configuration
+    print_status "Step 3: Checking for existing configuration..."
+    echo ""
+    
+    local config_file="automation/configs/config.json"
+    local config_dir="automation/configs"
+    
+    # Ensure config directory exists
+    mkdir -p "$config_dir"
+    
+    # Check if config.json already exists
+    if [ -f "$config_file" ]; then
+        echo ""
+        print_warning "Configuration file already exists: $config_file"
+        echo "Current configuration:"
+        cat "$config_file" | head -10
+        echo "..."
+        echo ""
+        read -p "Would you like to overwrite the existing config.json? (y/N): " overwrite_config
+        overwrite_config=$(echo "$overwrite_config" | tr '[:upper:]' '[:lower:]')
+        
+        if [[ "$overwrite_config" != "y" && "$overwrite_config" != "yes" ]]; then
+            print_status "Keeping existing configuration file."
+            print_status "You can manually edit $config_file if needed."
+            echo ""
+            print_status "Next steps:"
+            echo "1. Review your configuration: cat $config_file"
+            echo "2. Run a dry-run deployment:"
+            echo "   uv run python automation/deploy_jobstats.py --config $config_file --dry-run"
+            echo "3. Deploy jobstats:"
+            echo "   uv run python automation/deploy_jobstats.py --config $config_file"
+            echo ""
+            # Skip to guided setup step
+            run_guided_setup_step "$config_file"
+            return 0
+        else
+            print_status "Overwriting existing configuration file..."
+        fi
+    fi
+    
+    # Step 4: Collect configuration information
+    print_status "Step 4: Collecting configuration information..."
     echo ""
     
     # Basic configuration
@@ -225,42 +265,8 @@ main() {
         grafana_server_hosts="[]"
     fi
     
-    # Step 4: Create config.json
-    print_status "Step 4: Creating configuration file..."
-    
-    local config_file="automation/configs/config.json"
-    local config_dir="automation/configs"
-    
-    # Ensure config directory exists
-    mkdir -p "$config_dir"
-    
-    # Check if config.json already exists
-    if [ -f "$config_file" ]; then
-        echo ""
-        print_warning "Configuration file already exists: $config_file"
-        echo "Current configuration:"
-        cat "$config_file" | head -10
-        echo "..."
-        echo ""
-        read -p "Would you like to overwrite the existing config.json? (y/N): " overwrite_config
-        overwrite_config=$(echo "$overwrite_config" | tr '[:upper:]' '[:lower:]')
-        
-        if [[ "$overwrite_config" != "y" && "$overwrite_config" != "yes" ]]; then
-            print_status "Keeping existing configuration file."
-            print_status "You can manually edit $config_file if needed."
-            echo ""
-            print_status "Next steps:"
-            echo "1. Review your configuration: cat $config_file"
-            echo "2. Run a dry-run deployment:"
-            echo "   uv run python automation/deploy_jobstats.py --config $config_file --dry-run"
-            echo "3. Deploy jobstats:"
-            echo "   uv run python automation/deploy_jobstats.py --config $config_file"
-            echo ""
-            return 0
-        else
-            print_status "Overwriting existing configuration file..."
-        fi
-    fi
+    # Step 5: Create config.json
+    print_status "Step 5: Creating configuration file..."
     
     # Create the JSON configuration
     cat > "$config_file" << EOF
@@ -291,7 +297,7 @@ EOF
     
     print_success "Configuration file created: $config_file"
     
-    # Step 5: Display next steps
+    # Step 6: Display next steps
     echo ""
     echo "=========================================="
     print_success "Setup completed successfully!"
@@ -308,7 +314,7 @@ EOF
     print_status "Dry-run output will be saved to: automation/logs/dry-run-output.txt"
     echo ""
     
-    # Step 6: Show configuration summary
+    # Step 7: Show configuration summary
     print_status "Configuration Summary:"
     echo "  Cluster: $cluster_name"
     echo "  Prometheus: $prometheus_server:$prometheus_port"
@@ -320,9 +326,16 @@ EOF
     
     print_success "Setup complete! You can now run the deployment script."
     
-    # Step 7: Offer to run guided setup
+    # Step 8: Offer to run guided setup
+    run_guided_setup_step "$config_file"
+}
+
+# Function to handle guided setup step
+run_guided_setup_step() {
+    local config_file="$1"
+    
     echo ""
-    print_status "Step 7: Optional Guided Setup"
+    print_status "Step 8: Optional Guided Setup"
     echo ""
     print_status "Would you like to run the guided setup process?"
     print_status "This will walk you through the deployment step-by-step with detailed explanations."
