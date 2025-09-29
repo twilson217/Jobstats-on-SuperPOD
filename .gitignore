@@ -72,3 +72,6 @@ automation/configs/config.json
 # BCM documentation text files (generated content)
 .bcm-documentation-text/
 bcm-documentation-text/
+
+# Cursor IDE files
+.cursor-chats/
