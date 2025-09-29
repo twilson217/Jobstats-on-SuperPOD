@@ -387,7 +387,7 @@ class GuidedJobstatsSetup:
         """Section 2: CPU Job Statistics (Cgroups)"""
         self._print_header(
             "2. CPU Job Statistics (Cgroups)",
-            "Configure Slurm for cgroup-based job accounting"
+            "Configure Slurm for cgroup-based job accounting and install cgroup exporter"
         )
         
         # Add to document
@@ -397,16 +397,18 @@ class GuidedJobstatsSetup:
         self._add_to_document("")
         self._add_to_document("This section configures Slurm to use cgroup-based job accounting")
         self._add_to_document("instead of Linux process accounting for more accurate resource tracking.")
+        self._add_to_document("It also installs the cgroup_exporter to collect cgroup metrics.")
         self._add_to_document("")
         self._add_to_document("### What we'll do")
         self._add_to_document("")
-        self._add_to_document("- Configure slurm.conf for cgroup accounting")
-        self._add_to_document("- Verify cgroup configuration")
-        self._add_to_document("- Test cgroup functionality")
+        self._add_to_document("- Check current slurm.conf cgroup settings")
+        self._add_to_document("- Update slurm.conf with required cgroup settings")
+        self._add_to_document("- Install cgroup_exporter on compute nodes")
+        self._add_to_document("- Create systemd service for cgroup_exporter")
         self._add_to_document("")
-        self._add_to_document("### Configuration Requirements")
+        self._add_to_document("### Required slurm.conf Settings")
         self._add_to_document("")
-        self._add_to_document("The following settings must be present in slurm.conf:")
+        self._add_to_document("The following settings will be added to slurm.conf:")
         self._add_to_document("")
         self._add_to_document("```")
         self._add_to_document("JobAcctGatherType=jobacct_gather/cgroup")
@@ -414,10 +416,9 @@ class GuidedJobstatsSetup:
         self._add_to_document("TaskPlugin=affinity,cgroup")
         self._add_to_document("```")
         self._add_to_document("")
-        self._add_to_document("### Manual Configuration Required")
+        self._add_to_document("### Service Restart Required")
         self._add_to_document("")
-        self._add_to_document("You will need to manually update slurm.conf with the above settings.")
-        self._add_to_document("After updating, restart Slurm services:")
+        self._add_to_document("After updating slurm.conf, you will need to restart Slurm services:")
         self._add_to_document("")
         self._add_to_document("```bash")
         self._add_to_document("systemctl restart slurmctld")
@@ -426,44 +427,129 @@ class GuidedJobstatsSetup:
         self._add_to_document("")
         
         print(f"{Colors.BLUE}This section configures Slurm to use cgroup-based job accounting{Colors.END}")
-        print(f"{Colors.BLUE}instead of Linux process accounting for more accurate resource tracking.{Colors.END}")
+        print(f"{Colors.BLUE}and installs the cgroup_exporter for collecting cgroup metrics.{Colors.END}")
         
         print(f"\n{Colors.BOLD}{Colors.WHITE}What we'll do:{Colors.END}")
-        print(f"• Configure slurm.conf for cgroup accounting")
-        print(f"• Verify cgroup configuration")
-        print(f"• Test cgroup functionality")
+        print(f"• Check current slurm.conf cgroup settings")
+        print(f"• Update slurm.conf with required cgroup settings")
+        print(f"• Install cgroup_exporter on compute nodes")
+        print(f"• Create systemd service for cgroup_exporter")
         
-        # Commands for Slurm controller
-        slurm_controller_commands = [
+        # Get slurm controller host
+        slurm_controller = self.config['systems']['slurm_controller'][0] if self.config['systems']['slurm_controller'] else 'slurm-controller'
+        
+        # Step 1: Check current configuration
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 1: Checking current slurm.conf settings{Colors.END}")
+        
+        check_commands = [
             {
-                'host': self.config['systems']['slurm_controller'][0] if self.config['systems']['slurm_controller'] else 'slurm-controller',
-                'command': 'cmsh -c "wlm;use slurm;show" | grep -E "(JobAcctGatherType|ProctrackType|TaskPlugin)"',
-                'description': 'Check current Slurm cgroup configuration'
-            },
-            {
-                'host': self.config['systems']['slurm_controller'][0] if self.config['systems']['slurm_controller'] else 'slurm-controller',
-                'command': 'echo "Current slurm.conf cgroup settings will be displayed above"',
-                'description': 'Review current configuration'
+                'host': slurm_controller,
+                'command': 'grep -E "^(JobAcctGatherType|ProctrackType|TaskPlugin)" /etc/slurm/slurm.conf || echo "No cgroup settings found"',
+                'description': 'Check current slurm.conf cgroup settings'
             }
         ]
         
-        print(f"\n{Colors.BOLD}{Colors.YELLOW}Configuration Requirements:{Colors.END}")
-        print(f"The following settings must be present in slurm.conf:")
-        print(f"• {Colors.WHITE}JobAcctGatherType=jobacct_gather/cgroup{Colors.END}")
-        print(f"• {Colors.WHITE}ProctrackType=proctrack/cgroup{Colors.END}")
-        print(f"• {Colors.WHITE}TaskPlugin=affinity,cgroup{Colors.END}")
-        
-        print(f"\n{Colors.BOLD}{Colors.RED}Manual Configuration Required:{Colors.END}")
-        print(f"You will need to manually update slurm.conf with the above settings.")
-        print(f"After updating, restart Slurm services:")
-        print(f"• {Colors.WHITE}systemctl restart slurmctld{Colors.END}")
-        print(f"• {Colors.WHITE}systemctl restart slurmd{Colors.END}")
-        
-        if self._execute_commands(slurm_controller_commands, "Cgroup Configuration Check"):
-            print(f"\n{Colors.GREEN}✓ Cgroup configuration check completed{Colors.END}")
-        else:
-            print(f"\n{Colors.RED}✗ Cgroup configuration check failed{Colors.END}")
+        if not self._execute_commands(check_commands, "Current Configuration Check"):
+            print(f"\n{Colors.RED}✗ Failed to check current configuration{Colors.END}")
             return False
+        
+        # Step 2: Update slurm.conf
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 2: Updating slurm.conf with cgroup settings{Colors.END}")
+        
+        update_commands = [
+            {
+                'host': slurm_controller,
+                'command': '''# Backup original slurm.conf
+cp /etc/slurm/slurm.conf /etc/slurm/slurm.conf.backup.$(date +%Y%m%d_%H%M%S)
+
+# Add cgroup settings if not present
+grep -q "JobAcctGatherType=jobacct_gather/cgroup" /etc/slurm/slurm.conf || echo "JobAcctGatherType=jobacct_gather/cgroup" >> /etc/slurm/slurm.conf
+grep -q "ProctrackType=proctrack/cgroup" /etc/slurm/slurm.conf || echo "ProctrackType=proctrack/cgroup" >> /etc/slurm/slurm.conf
+grep -q "TaskPlugin=affinity,cgroup" /etc/slurm/slurm.conf || echo "TaskPlugin=affinity,cgroup" >> /etc/slurm/slurm.conf
+
+# Verify the settings were added
+echo "Updated slurm.conf cgroup settings:"
+grep -E "^(JobAcctGatherType|ProctrackType|TaskPlugin)" /etc/slurm/slurm.conf''',
+                'description': 'Update slurm.conf with cgroup settings'
+            }
+        ]
+        
+        if not self._execute_commands(update_commands, "Slurm Configuration Update"):
+            print(f"\n{Colors.RED}✗ Failed to update slurm.conf{Colors.END}")
+            return False
+        
+        # Step 3: Install cgroup_exporter on compute nodes
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 3: Installing cgroup_exporter on compute nodes{Colors.END}")
+        
+        cgroup_commands = []
+        for dgx_node in self.config['systems']['dgx_nodes']:
+            cgroup_commands.extend([
+                {
+                    'host': dgx_node,
+                    'command': f'mkdir -p {self.working_dir}',
+                    'description': f'Create working directory on {dgx_node}'
+                },
+                {
+                    'host': dgx_node,
+                    'command': f'cd {self.working_dir} && git clone {self.repositories["cgroup_exporter"]}',
+                    'description': f'Clone cgroup_exporter on {dgx_node}'
+                },
+                {
+                    'host': dgx_node,
+                    'command': f'cd {self.working_dir}/cgroup_exporter && make build',
+                    'description': f'Build cgroup_exporter on {dgx_node}'
+                },
+                {
+                    'host': dgx_node,
+                    'command': f'cp {self.working_dir}/cgroup_exporter/cgroup_exporter /usr/local/bin/',
+                    'description': f'Install cgroup_exporter binary on {dgx_node}'
+                },
+                {
+                    'host': dgx_node,
+                    'command': 'useradd --no-create-home --shell /bin/false prometheus || true',
+                    'description': f'Create prometheus user on {dgx_node}'
+                },
+                {
+                    'host': dgx_node,
+                    'command': f'''# Create systemd service for cgroup_exporter
+cat > /etc/systemd/system/cgroup_exporter.service << 'EOF'
+[Unit]
+Description=Cgroup Exporter
+After=network.target
+
+[Service]
+Type=simple
+User=prometheus
+ExecStart=/usr/local/bin/cgroup_exporter --port={self.config['cgroup_exporter_port']}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF''',
+                    'description': f'Create cgroup_exporter systemd service on {dgx_node}'
+                },
+                {
+                    'host': dgx_node,
+                    'command': 'systemctl daemon-reload && systemctl enable cgroup_exporter && systemctl start cgroup_exporter',
+                    'description': f'Start cgroup_exporter service on {dgx_node}'
+                }
+            ])
+        
+        if not self._execute_commands(cgroup_commands, "Cgroup Exporter Installation"):
+            print(f"\n{Colors.RED}✗ Failed to install cgroup_exporter{Colors.END}")
+            return False
+        
+        print(f"\n{Colors.BOLD}{Colors.GREEN}✓ Cgroup configuration and exporter installation completed{Colors.END}")
+        
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Next Steps:{Colors.END}")
+        print(f"1. Restart Slurm services to apply cgroup configuration:")
+        print(f"   • {Colors.WHITE}systemctl restart slurmctld{Colors.END}")
+        print(f"   • {Colors.WHITE}systemctl restart slurmd{Colors.END}")
+        print(f"2. Verify cgroup_exporter is running:")
+        print(f"   • {Colors.WHITE}systemctl status cgroup_exporter{Colors.END}")
+        print(f"3. Check metrics endpoint:")
+        print(f"   • {Colors.WHITE}curl http://localhost:{self.config['cgroup_exporter_port']}/metrics{Colors.END}")
         
         if not self.dry_run:
             input(f"\n{Colors.YELLOW}Press Enter to continue to the next section...{Colors.END}")
