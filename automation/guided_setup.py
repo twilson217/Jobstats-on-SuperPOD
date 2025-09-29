@@ -283,7 +283,9 @@ class GuidedJobstatsSetup:
                 description = cmd.get('description', '')
                 command = cmd['command']
                 if description:
-                    self._add_to_document(f"# Step {i} - {description}")
+                    # Remove hostname from description since it's already shown above
+                    clean_description = description.replace(f" on {host}", "").replace(f" on {host.split('.')[0]}", "")
+                    self._add_to_document(f"# Step {i} - {clean_description}")
                 else:
                     self._add_to_document(f"# Step {i}")
                 self._add_to_document("")
