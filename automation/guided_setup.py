@@ -48,10 +48,11 @@ class Colors:
 class GuidedJobstatsSetup:
     """Interactive guided setup for BCM jobstats deployment."""
     
-    def __init__(self, resume: bool = False, config_file: Optional[str] = None, dry_run: bool = False):
+    def __init__(self, resume: bool = False, config_file: Optional[str] = None, dry_run: bool = False, non_interactive: bool = False):
         self.resume = resume
         self.config_file = config_file
         self.dry_run = dry_run
+        self.non_interactive = non_interactive
         self.config = self._load_config()
         self.progress_file = Path("automation/logs/guided_setup_progress.json")
         self.progress = self._load_progress()
@@ -246,6 +247,9 @@ class GuidedJobstatsSetup:
     def _safe_input(self, prompt: str) -> bool:
         """Safely handle input, returning True if user confirms or in non-interactive mode."""
         try:
+            if self.dry_run or self.non_interactive:
+                print(f"{prompt} (auto-confirmed)")
+                return True
             response = input(prompt).strip().lower()
             return response in ['y', 'yes']
         except EOFError:
@@ -255,6 +259,9 @@ class GuidedJobstatsSetup:
     def _safe_continue(self, message: str = "Press Enter to continue to the next section..."):
         """Safely handle continue prompts."""
         try:
+            if self.dry_run or self.non_interactive:
+                print(f"\n{Colors.BLUE}[NON-INTERACTIVE] {message.replace('Press Enter to ', 'Auto-').replace('...', '')}{Colors.END}")
+                return
             input(f"\n{Colors.YELLOW}{message}{Colors.END}")
         except EOFError:
             print(f"\n{Colors.BLUE}[NON-INTERACTIVE] Continuing to next section...{Colors.END}")
@@ -577,7 +584,7 @@ python3 /tmp/update_slurm_conf.py''',
                 },
                 {
                     'host': dgx_node,
-                    'command': 'systemctl stop cgroup_exporter || true',
+                    'command': 'systemctl stop cgroup_exporter || true && sleep 2',
                     'description': f'Stop cgroup_exporter service on {dgx_node} (if running)'
                 },
                 {
@@ -735,7 +742,7 @@ EOF''',
                 },
                 {
                     'host': dgx_node,
-                    'command': 'systemctl stop nvidia_gpu_exporter || true',
+                    'command': 'systemctl stop nvidia_gpu_exporter || true && sleep 2',
                     'description': f'Stop nvidia_gpu_exporter service on {dgx_node} (if running)'
                 },
                 {
@@ -1006,7 +1013,7 @@ rm /tmp/nvidia_gpu_exporter.service''',
                 },
                 {
                     'host': dgx_node,
-                    'command': 'systemctl stop node_exporter || true',
+                    'command': 'systemctl stop node_exporter || true && sleep 2',
                     'description': f'Stop node_exporter service on {dgx_node} (if running)'
                 },
                 {
@@ -1225,6 +1232,11 @@ EOF''',
                 'host': self.config['prometheus_server'],
                 'command': 'tar xzf prometheus-2.45.0.linux-amd64.tar.gz',
                 'description': 'Extract Prometheus'
+            },
+            {
+                'host': self.config['prometheus_server'],
+                'command': 'systemctl stop prometheus || true && sleep 2',
+                'description': 'Stop Prometheus service (if running)'
             },
             {
                 'host': self.config['prometheus_server'],
@@ -1968,11 +1980,14 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    # Run guided setup
+    # Run guided setup (interactive)
     python guided_setup.py
     
     # Run dry-run to generate documentation only
     python guided_setup.py --dry-run
+    
+    # Run in non-interactive mode (auto-confirm all prompts)
+    python guided_setup.py --non-interactive
     
     # Resume from where you left off
     python guided_setup.py --resume
@@ -2001,10 +2016,16 @@ Examples:
         help='Generate documentation without executing commands'
     )
     
+    parser.add_argument(
+        '--non-interactive',
+        action='store_true',
+        help='Run in non-interactive mode (auto-confirm all prompts)'
+    )
+    
     args = parser.parse_args()
     
     # Create guided setup instance
-    setup = GuidedJobstatsSetup(resume=args.resume, config_file=args.config, dry_run=args.dry_run)
+    setup = GuidedJobstatsSetup(resume=args.resume, config_file=args.config, dry_run=args.dry_run, non_interactive=args.non_interactive)
     
     # Run guided setup
     success = setup.run_guided_setup()
