@@ -11,6 +11,16 @@ Jobstats is a comprehensive job monitoring platform designed for CPU and GPU clu
 - Web-based dashboards via Grafana
 - Command-line tools for job analysis
 
+## ⚠️ Critical Issues Discovered
+
+**IMPORTANT**: During testing, we discovered several critical issues that must be addressed for jobstats to function properly:
+
+- **Database Issues**: MariaDB must be started and configured
+- **Cgroup Collection**: cgroup_exporter needs correct paths for job monitoring
+- **Configuration**: jobstats config.py needs Prometheus server address fix
+
+**See**: [`automation/docs/quick_fixes.md`](automation/docs/quick_fixes.md) for immediate fixes and [`automation/docs/jobstats_deployment_issues.md`](automation/docs/jobstats_deployment_issues.md) for detailed analysis.
+
 ## Deployment Options
 
 This repository provides three approaches for deploying jobstats on your DGX SuperPOD:

@@ -608,7 +608,7 @@ After=network.target
 [Service]
 Type=simple
 User=prometheus
-ExecStart=/usr/local/bin/cgroup_exporter --web.listen-address=:{self.config['cgroup_exporter_port']} --config.paths=/user.slice,/system.slice,/slurm
+ExecStart=/usr/local/bin/cgroup_exporter --web.listen-address=:{self.config['cgroup_exporter_port']} --config.paths=/sys/fs/cgroup/cpu,cpuacct/slurm,/sys/fs/cgroup/memory/slurm,/sys/fs/cgroup/freezer/slurm,/sys/fs/cgroup/devices/slurm
 Restart=always
 RestartSec=5
 
@@ -1399,9 +1399,12 @@ scrape_configs:
         self._add_to_document("### What we'll do")
         self._add_to_document("")
         self._add_to_document("- Install Grafana")
-        self._add_to_document("- Configure Grafana data source")
-        self._add_to_document("- Import jobstats dashboards")
         self._add_to_document("- Start and enable Grafana service")
+        if not self.config.get('use_existing_grafana', False) and not self.config.get('use_existing_prometheus', False):
+            self._add_to_document("- Automatically configure Prometheus data source")
+            self._add_to_document("- Automatically change default admin password")
+        else:
+            self._add_to_document("- Manual configuration required (existing Grafana detected)")
         self._add_to_document("")
         
         print(f"{Colors.BLUE}This section sets up Grafana for visualizing{Colors.END}")
@@ -1409,9 +1412,12 @@ scrape_configs:
         
         print(f"\n{Colors.BOLD}{Colors.WHITE}What we'll do:{Colors.END}")
         print(f"• Install Grafana")
-        print(f"• Configure Prometheus data source")
-        print(f"• Import jobstats dashboard")
         print(f"• Start Grafana service")
+        if not self.config.get('use_existing_grafana', False) and not self.config.get('use_existing_prometheus', False):
+            print(f"• Automatically configure Prometheus data source")
+            print(f"• Automatically change default admin password")
+        else:
+            print(f"• Manual configuration required (existing Grafana detected)")
         
         # Commands for Grafana server
         grafana_commands = [
@@ -1458,11 +1464,63 @@ scrape_configs:
             print(f"\n{Colors.RED}✗ Failed to start Grafana service{Colors.END}")
             return False
         
-        print(f"\n{Colors.BOLD}{Colors.YELLOW}Manual Configuration Required:{Colors.END}")
-        print(f"1. Access Grafana at http://{self.config['grafana_server']}:{self.config['grafana_port']}")
-        print(f"2. Login with admin/admin (change password)")
-        print(f"3. Add Prometheus data source: http://{self.config['prometheus_server']}:{self.config['prometheus_port']}")
-        print(f"4. Import jobstats dashboard from .jobstats/jobstats/grafana/")
+        # Automated Grafana configuration (only for fresh installations)
+        if not self.config.get('use_existing_grafana', False) and not self.config.get('use_existing_prometheus', False):
+            # Add configuration commands to dry-run documentation
+            self._add_to_document("")
+            self._add_to_document("### Automated Configuration")
+            self._add_to_document("")
+            print(f"\n{Colors.BOLD}{Colors.CYAN}Configuring Grafana automatically...{Colors.END}")
+            
+            grafana_config_commands = [
+                {
+                    'host': self.config['grafana_server'],
+                    'command': f'sleep 15',  # Wait for Grafana to fully start
+                    'description': 'Wait for Grafana to start'
+                },
+                {
+                    'host': self.config['grafana_server'],
+                    'command': f'''curl -X POST -H "Content-Type: application/json" -d '{{"name":"Prometheus","type":"prometheus","url":"http://{self.config["prometheus_server"]}:{self.config.get("prometheus_port", 9090)}","access":"proxy","isDefault":true}}' http://admin:admin@localhost:{self.config.get("grafana_port", 3000)}/api/datasources''',
+                    'description': 'Add Prometheus data source'
+                },
+                {
+                    'host': self.config['grafana_server'],
+                    'command': f'''curl -X PUT -H "Content-Type: application/json" -d '{{"oldPassword":"admin","newPassword":"jobstats123","confirmNew":"jobstats123"}}' http://admin:admin@localhost:{self.config.get("grafana_port", 3000)}/api/user/password''',
+                    'description': 'Change default admin password'
+                }
+            ]
+            
+            if self._execute_commands(grafana_config_commands):
+                print(f"\n{Colors.GREEN}✓ Grafana configuration completed{Colors.END}")
+                print(f"\n{Colors.BOLD}{Colors.WHITE}Grafana Access Information:{Colors.END}")
+                print(f"• URL: http://{self.config['grafana_server']}:{self.config.get('grafana_port', 3000)}")
+                print(f"• Username: admin")
+                print(f"• Password: jobstats123")
+                print(f"• Prometheus data source: Automatically configured")
+            else:
+                print(f"\n{Colors.YELLOW}⚠ Grafana configuration partially failed - manual setup may be required{Colors.END}")
+                print(f"\n{Colors.BOLD}{Colors.YELLOW}Manual Configuration Required:{Colors.END}")
+                print(f"1. Access Grafana at http://{self.config['grafana_server']}:{self.config.get('grafana_port', 3000)}")
+                print(f"2. Login with admin/admin (change password)")
+                print(f"3. Add Prometheus data source: http://{self.config['prometheus_server']}:{self.config.get('prometheus_port', 9090)}")
+        else:
+            # Add manual configuration note to dry-run documentation
+            self._add_to_document("")
+            self._add_to_document("### Manual Configuration Required")
+            self._add_to_document("")
+            self._add_to_document("**Note:** Existing Grafana detected - automated configuration skipped")
+            self._add_to_document("")
+            self._add_to_document("1. Access Grafana at http://{self.config['grafana_server']}:{self.config.get('grafana_port', 3000)}")
+            self._add_to_document("2. Login with your existing credentials")
+            self._add_to_document("3. Add Prometheus data source: http://{self.config['prometheus_server']}:{self.config.get('prometheus_port', 9090)}")
+            self._add_to_document("4. Import jobstats dashboard from .jobstats/jobstats/grafana/")
+            self._add_to_document("")
+            
+            print(f"\n{Colors.BOLD}{Colors.YELLOW}Manual Configuration Required (existing Grafana detected):{Colors.END}")
+            print(f"1. Access Grafana at http://{self.config['grafana_server']}:{self.config.get('grafana_port', 3000)}")
+            print(f"2. Login with your existing credentials")
+            print(f"3. Add Prometheus data source: http://{self.config['prometheus_server']}:{self.config.get('prometheus_port', 9090)}")
+            print(f"4. Import jobstats dashboard from .jobstats/jobstats/grafana/")
         
         if not self.dry_run:
             self._safe_continue()
@@ -1573,28 +1631,38 @@ scrape_configs:
             jobstats_commands.extend([
                 {
                     'host': login_node,
-                    'command': f'cp {self.working_dir}/jobstats/jobstats /usr/local/bin/',
+                    'command': 'mkdir -p /usr/local/jobstats',
+                    'description': f'Create /usr/local/jobstats directory on {login_node}'
+                },
+                {
+                    'host': login_node,
+                    'command': f'cp {self.working_dir}/jobstats/jobstats /usr/local/jobstats/',
                     'description': f'Install jobstats binary on {login_node}'
                 },
                 {
                     'host': login_node,
-                    'command': f'cp {self.working_dir}/jobstats/jobstats.py /usr/local/bin/',
+                    'command': f'cp {self.working_dir}/jobstats/jobstats.py /usr/local/jobstats/',
                     'description': f'Install jobstats.py on {login_node}'
                 },
                 {
                     'host': login_node,
-                    'command': f'cp {self.working_dir}/jobstats/output_formatters.py /usr/local/bin/',
+                    'command': f'cp {self.working_dir}/jobstats/output_formatters.py /usr/local/jobstats/',
                     'description': f'Install output_formatters.py on {login_node}'
                 },
                 {
                     'host': login_node,
-                    'command': f'cp {self.working_dir}/jobstats/config.py /usr/local/bin/',
+                    'command': f'cp {self.working_dir}/jobstats/config.py /usr/local/jobstats/',
                     'description': f'Install config.py on {login_node}'
                 },
                 {
                     'host': login_node,
-                    'command': 'chmod +x /usr/local/bin/jobstats',
+                    'command': 'chmod +x /usr/local/jobstats/jobstats',
                     'description': f'Make jobstats executable on {login_node}'
+                },
+                {
+                    'host': login_node,
+                    'command': 'ln -sf /usr/local/jobstats/jobstats /usr/local/bin/jobstats',
+                    'description': f'Create symlink for jobstats command on {login_node}'
                 }
             ])
         
@@ -1604,10 +1672,31 @@ scrape_configs:
             print(f"\n{Colors.RED}✗ Jobstats command installation failed{Colors.END}")
             return False
         
-        print(f"\n{Colors.BOLD}{Colors.YELLOW}Configuration Required:{Colors.END}")
-        print(f"Update /usr/local/bin/config.py with:")
+        # Update config.py with correct Prometheus server address
+        config_update_commands = []
+        for login_node in self.config['systems']['login_nodes']:
+            config_update_commands.extend([
+                {
+                    'host': login_node,
+                    'command': f'sed -i "s|http://cluster-stats:8480|http://{self.config["prometheus_server"]}:{self.config["prometheus_port"]}|g" /usr/local/jobstats/config.py',
+                    'description': f'Update Prometheus server address in config.py on {login_node}'
+                },
+                {
+                    'host': login_node,
+                    'command': f'sed -i "s|PROM_RETENTION_DAYS = 365|PROM_RETENTION_DAYS = {self.config.get("prometheus_retention_days", 365)}|g" /usr/local/jobstats/config.py',
+                    'description': f'Update Prometheus retention days in config.py on {login_node}'
+                }
+            ])
+        
+        if self._execute_commands(config_update_commands):
+            print(f"\n{Colors.GREEN}✓ Jobstats configuration updated{Colors.END}")
+        else:
+            print(f"\n{Colors.RED}✗ Jobstats configuration update failed{Colors.END}")
+            return False
+        
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Configuration Applied:{Colors.END}")
         print(f"• {Colors.WHITE}PROM_SERVER = \"http://{self.config['prometheus_server']}:{self.config['prometheus_port']}\"{Colors.END}")
-        print(f"• {Colors.WHITE}PROM_RETENTION_DAYS = {self.config['prometheus_retention_days']}{Colors.END}")
+        print(f"• {Colors.WHITE}PROM_RETENTION_DAYS = {self.config.get('prometheus_retention_days', 365)}{Colors.END}")
         
         if not self.dry_run:
             self._safe_continue("Press Enter to continue...")
