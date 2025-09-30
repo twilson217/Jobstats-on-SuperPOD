@@ -1655,7 +1655,7 @@ scrape_configs:
         slurm_category_commands = [
             {
                 'host': None,  # Run locally on BCM headnode
-                'command': f'cmsh -c "category; use {slurm_category}; services; add cgroup_exporter"',
+                'command': f'cmsh -c "category; use {slurm_category}; services; add cgroup_exporter; commit"',
                 'description': f'Add cgroup_exporter to {slurm_category} category'
             },
             {
@@ -1665,7 +1665,7 @@ scrape_configs:
             },
             {
                 'host': None,  # Run locally on BCM headnode
-                'command': f'cmsh -c "category; use {slurm_category}; services; add node_exporter"',
+                'command': f'cmsh -c "category; use {slurm_category}; services; add node_exporter; commit"',
                 'description': f'Add node_exporter to {slurm_category} category'
             },
             {
@@ -1675,7 +1675,7 @@ scrape_configs:
             },
             {
                 'host': None,  # Run locally on BCM headnode
-                'command': f'cmsh -c "category; use {slurm_category}; services; add nvidia_gpu_prometheus_exporter"',
+                'command': f'cmsh -c "category; use {slurm_category}; services; add nvidia_gpu_prometheus_exporter; commit"',
                 'description': f'Add nvidia_gpu_prometheus_exporter to {slurm_category} category'
             },
             {
@@ -1695,7 +1695,7 @@ scrape_configs:
         kubernetes_category_commands = [
             {
                 'host': None,  # Run locally on BCM headnode
-                'command': f'cmsh -c "category; use {kubernetes_category}; services; add cgroup_exporter"',
+                'command': f'cmsh -c "category; use {kubernetes_category}; services; add cgroup_exporter; commit"',
                 'description': f'Add cgroup_exporter to {kubernetes_category} category (disabled)'
             },
             {
@@ -1705,7 +1705,7 @@ scrape_configs:
             },
             {
                 'host': None,  # Run locally on BCM headnode
-                'command': f'cmsh -c "category; use {kubernetes_category}; services; add node_exporter"',
+                'command': f'cmsh -c "category; use {kubernetes_category}; services; add node_exporter; commit"',
                 'description': f'Add node_exporter to {kubernetes_category} category (disabled)'
             },
             {
@@ -1715,7 +1715,7 @@ scrape_configs:
             },
             {
                 'host': None,  # Run locally on BCM headnode
-                'command': f'cmsh -c "category; use {kubernetes_category}; services; add nvidia_gpu_prometheus_exporter"',
+                'command': f'cmsh -c "category; use {kubernetes_category}; services; add nvidia_gpu_prometheus_exporter; commit"',
                 'description': f'Add nvidia_gpu_prometheus_exporter to {kubernetes_category} category (disabled)'
             },
             {
@@ -1736,11 +1736,11 @@ scrape_configs:
         self._add_to_document("")
         self._add_to_document("```bash")
         self._add_to_document(f"# Configure services for Slurm category ({slurm_category})")
-        self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; add cgroup_exporter\"")
+        self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; add cgroup_exporter; commit\"")
         self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; use cgroup_exporter; set autostart yes; set monitored yes; commit\"")
-        self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; add node_exporter\"")
+        self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; add node_exporter; commit\"")
         self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; use node_exporter; set autostart yes; set monitored yes; commit\"")
-        self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; add nvidia_gpu_prometheus_exporter\"")
+        self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; add nvidia_gpu_prometheus_exporter; commit\"")
         self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; use nvidia_gpu_prometheus_exporter; set autostart yes; set monitored yes; commit\"")
         self._add_to_document("```")
         self._add_to_document("")
@@ -1748,11 +1748,11 @@ scrape_configs:
         self._add_to_document("")
         self._add_to_document("```bash")
         self._add_to_document(f"# Configure services for Kubernetes category ({kubernetes_category})")
-        self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; add cgroup_exporter\"")
+        self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; add cgroup_exporter; commit\"")
         self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; use cgroup_exporter; set autostart no; set monitored no; commit\"")
-        self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; add node_exporter\"")
+        self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; add node_exporter; commit\"")
         self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; use node_exporter; set autostart no; set monitored no; commit\"")
-        self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; add nvidia_gpu_prometheus_exporter\"")
+        self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; add nvidia_gpu_prometheus_exporter; commit\"")
         self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; use nvidia_gpu_prometheus_exporter; set autostart no; set monitored no; commit\"")
         self._add_to_document("```")
         self._add_to_document("")
