@@ -48,8 +48,11 @@ The guided setup provides:
 
 **Usage:**
 ```bash
-# Full automated deployment
+# Interactive mode (default)
 uv run python automation/guided_setup.py --config automation/configs/config.json
+
+# Non-interactive mode (auto-confirm all prompts)
+uv run python automation/guided_setup.py --config automation/configs/config.json --non-interactive
 
 # Dry-run with documentation generation
 uv run python automation/guided_setup.py --config automation/configs/config.json --dry-run
@@ -107,8 +110,11 @@ The automation provides:
    ```
 2. Run the guided setup:
    ```bash
-   # Full automated deployment
+   # Interactive mode (default)
    uv run python automation/guided_setup.py --config automation/configs/config.json
+   
+   # Non-interactive mode (auto-confirm all prompts)
+   uv run python automation/guided_setup.py --config automation/configs/config.json --non-interactive
    
    # Or dry-run with documentation generation
    uv run python automation/guided_setup.py --config automation/configs/config.json --dry-run

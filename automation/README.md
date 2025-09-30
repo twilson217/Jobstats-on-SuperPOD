@@ -6,6 +6,7 @@ This project provides automated deployment of Princeton University's jobstats mo
 
 - **🚀 Quick Setup**: Interactive `setup.sh` script for one-command deployment
 - **📋 Guided Setup**: Step-by-step interactive deployment with progress tracking
+- **🤖 Non-Interactive Mode**: Automated deployment with `--non-interactive` flag
 - **📄 Documentation Generation**: Creates comprehensive deployment documentation
 - **🔍 Validation Script**: Comprehensive testing and validation of all components
 - **BCM Integration**: Uses `cmsh` to verify configurations and follows BCM best practices
