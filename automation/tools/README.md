@@ -7,11 +7,8 @@ This directory contains various tools for testing, validating, and managing the 
 - [Overview](#overview)
 - [Tools](#tools)
   - [validate_jobstats_deployment.py](#validate_jobstats_deploymentpy)
-  - [test_jobstats_job.sh](#test_jobstats_jobsh)
-  - [test_jobstats_job.py](#test_jobstats_jobpy)
-  - [test_jobstats_pytorch.py](#test_jobstats_pytorchpy)
-  - [test_jobstats_pytorch.sh](#test_jobstats_pytorchsh)
   - [convert_pdfs.sh](#convert_pdfssh)
+  - [fix_jobstats_timelimit.py](#fix_jobstats_timelimitpy)
 - [Usage Examples](#usage-examples)
 - [Prerequisites](#prerequisites)
 - [Troubleshooting](#troubleshooting)
@@ -52,124 +49,6 @@ python3 validate_jobstats_deployment.py --sections "1,2,3"
 - Checks BCM configuration
 - Provides detailed pass/fail reporting
 
-### test_jobstats_job.sh
-
-**Purpose**: Interactive shell script for testing jobstats with a simple CPU workload.
-
-**Use Case**:
-- Quick validation of jobstats functionality
-- Test with basic CPU-intensive workload
-- Interactive configuration of job parameters
-
-**Usage**:
-```bash
-# Interactive mode (prompts for all parameters)
-./test_jobstats_job.sh
-
-# Non-interactive mode with parameters
-./test_jobstats_job.sh --duration 5 --partition defq --nodelist dgx-01 --username testuser
-
-# Dry-run mode
-./test_jobstats_job.sh --dry-run --duration 2
-```
-
-**Features**:
-- Interactive parameter collection
-- CPU-intensive workload (matrix multiplication)
-- Real-time job monitoring
-- Automatic jobstats validation
-- Dry-run capability
-
-### test_jobstats_job.py
-
-**Purpose**: Python script for testing jobstats with configurable workloads.
-
-**Use Case**:
-- More flexible workload testing
-- Programmatic job submission
-- Integration with other Python tools
-
-**Usage**:
-```bash
-# Interactive mode
-python3 test_jobstats_job.py
-
-# Command-line parameters
-python3 test_jobstats_job.py --duration 10 --partition defq --nodelist dgx-01 --username testuser
-
-# Dry-run mode
-python3 test_jobstats_job.py --dry-run --duration 5
-```
-
-**Features**:
-- Configurable workload intensity
-- Multiple workload types (CPU, memory)
-- Detailed progress reporting
-- Automatic dependency installation
-- Non-interactive mode support
-
-### test_jobstats_pytorch.py
-
-**Purpose**: Python script for testing jobstats with PyTorch-based GPU workloads.
-
-**Use Case**:
-- Test GPU metrics collection
-- Validate GPU job monitoring
-- Generate realistic deep learning workloads
-- Test GPU memory usage tracking
-
-**Usage**:
-```bash
-# Interactive mode
-python3 test_jobstats_pytorch.py
-
-# Command-line parameters
-python3 test_jobstats_pytorch.py --duration 5 --partition defq --nodelist dgx-01 --username testuser
-
-# Dry-run mode
-python3 test_jobstats_pytorch.py --dry-run --duration 2
-```
-
-**Features**:
-- PyTorch-based neural network training
-- ~4GB VRAM consumption
-- Realistic deep learning workload
-- GPU utilization monitoring
-- Automatic PyTorch installation
-
-### test_jobstats_pytorch.sh
-
-**Purpose**: Shell script wrapper for PyTorch GPU testing with Slurm integration.
-
-**Use Case**:
-- Easy-to-use GPU testing
-- Slurm job submission
-- Module loading (slurm, cuda, python)
-- Comprehensive job script generation
-
-**Usage**:
-```bash
-# Interactive mode
-./test_jobstats_pytorch.sh
-
-# Non-interactive mode
-./test_jobstats_pytorch.sh --duration 5 --partition defq --nodelist dgx-01 --username testuser
-
-# Dry-run mode
-./test_jobstats_pytorch.sh --dry-run --duration 2
-
-# Quiet mode (non-interactive)
-./test_jobstats_pytorch.sh -q --duration 3
-```
-
-**Features**:
-- Complete Slurm job script generation
-- Module loading (slurm, cuda, python)
-- PyTorch dependency management
-- GPU resource allocation
-- Dry-run with full script preview
-- Interactive and non-interactive modes
-
 ### convert_pdfs.sh
 
 **Purpose**: Utility script for converting PDF files (legacy tool).
@@ -188,6 +67,33 @@ python3 test_jobstats_pytorch.py --dry-run --duration 2
 ./convert_pdfs.sh *.pdf
 ```
 
+### fix_jobstats_timelimit.py
+
+**Purpose**: Fix for jobstats timelimit parsing issues with UNLIMITED time limits.
+
+**Use Case**:
+- Fix TypeError when jobstats encounters UNLIMITED time limits
+- Resolve string vs integer comparison errors
+- Fix repeated "UNLIMITED" display in time limit field
+
+**Usage**:
+```bash
+# Run the fix (must be run on login node where jobstats is installed)
+python3 fix_jobstats_timelimit.py
+
+# The script will:
+# - Create a backup of the original file
+# - Apply fixes to handle UNLIMITED time limits
+# - Test the fix with a recent job
+# - Restore from backup if something goes wrong
+```
+
+**Features**:
+- Automatic backup creation
+- Safe error handling with rollback
+- Built-in testing to verify fix works
+- Handles both string comparison and formatting issues
+
 ## Usage Examples
 
 ### Complete Deployment Validation
@@ -196,38 +102,21 @@ python3 test_jobstats_pytorch.py --dry-run --duration 2
 # 1. Validate the entire deployment
 python3 validate_jobstats_deployment.py
 
-# 2. Test with CPU workload
-./test_jobstats_job.sh --duration 5 --partition defq --nodelist dgx-01
-
-# 3. Test with GPU workload
-./test_jobstats_pytorch.sh --duration 3 --partition defq --nodelist dgx-01
-
-# 4. Check jobstats output
+# 2. Check jobstats output for existing jobs
 jobstats -j <job_id>
 ```
 
-### Quick Testing Workflow
+### Jobstats Fix Workflow
 
 ```bash
-# Dry-run to see what would be executed
-./test_jobstats_pytorch.sh --dry-run --duration 2
+# 1. Fix jobstats UNLIMITED time limit issues
+python3 fix_jobstats_timelimit.py
 
-# Run actual test
-./test_jobstats_pytorch.sh --duration 5 --partition defq --nodelist dgx-01 --username testuser
+# 2. Test the fix
+python3 fix_jobstats_timelimit.py --test
 
-# Monitor the job
-squeue -u testuser
-
-# Check jobstats output
+# 3. Verify jobstats works correctly
 jobstats -j <job_id>
-```
-
-### Non-Interactive Testing
-
-```bash
-# Run all tests without prompts
-python3 validate_jobstats_deployment.py
-./test_jobstats_pytorch.sh -q --duration 3 --partition defq --nodelist dgx-01 --username testuser
 ```
 
 ## Prerequisites
