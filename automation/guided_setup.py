@@ -1625,6 +1625,7 @@ scrape_configs:
         self._add_to_document("")
         self._add_to_document("### What we'll do")
         self._add_to_document("")
+        self._add_to_document("- Install Python dependencies (requests, blessed)")
         self._add_to_document("- Install jobstats binary and Python files")
         self._add_to_document("- Configure jobstats for your cluster")
         self._add_to_document("- Test jobstats command functionality")
@@ -1634,6 +1635,7 @@ scrape_configs:
         print(f"{Colors.BLUE}for generating job efficiency reports.{Colors.END}")
         
         print(f"\n{Colors.BOLD}{Colors.WHITE}What we'll do:{Colors.END}")
+        print(f"• Install Python dependencies (requests, blessed)")
         print(f"• Install jobstats command files")
         print(f"• Configure jobstats settings")
         print(f"• Test jobstats functionality")
@@ -1684,6 +1686,30 @@ scrape_configs:
             print(f"\n{Colors.GREEN}✓ Jobstats command installation completed{Colors.END}")
         else:
             print(f"\n{Colors.RED}✗ Jobstats command installation failed{Colors.END}")
+            return False
+        
+        # Install Python dependencies for jobstats
+        print(f"\n{Colors.BOLD}{Colors.WHITE}Installing Python dependencies for jobstats...{Colors.END}")
+        
+        python_deps_commands = []
+        for login_node in self.config['systems']['login_nodes']:
+            python_deps_commands.extend([
+                {
+                    'host': login_node,
+                    'command': 'apt update',
+                    'description': f'Update package list on {login_node}'
+                },
+                {
+                    'host': login_node,
+                    'command': 'apt install -y python3-requests python3-blessed',
+                    'description': f'Install Python dependencies (requests, blessed) on {login_node}'
+                }
+            ])
+        
+        if self._execute_commands(python_deps_commands):
+            print(f"\n{Colors.GREEN}✓ Python dependencies installed{Colors.END}")
+        else:
+            print(f"\n{Colors.RED}✗ Python dependencies installation failed{Colors.END}")
             return False
         
         # Update config.py with correct Prometheus server address
