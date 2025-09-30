@@ -608,7 +608,7 @@ After=network.target
 [Service]
 Type=simple
 User=prometheus
-ExecStart=/usr/local/bin/cgroup_exporter --web.listen-address=:{self.config['cgroup_exporter_port']} --config.paths=/sys/fs/cgroup/cpu,cpuacct/slurm,/sys/fs/cgroup/memory/slurm,/sys/fs/cgroup/freezer/slurm,/sys/fs/cgroup/devices/slurm
+ExecStart=/usr/local/bin/cgroup_exporter --web.listen-address=:{self.config['cgroup_exporter_port']} --config.paths /slurm --collect.fullslurm
 Restart=always
 RestartSec=5
 
@@ -1356,6 +1356,18 @@ scrape_configs:
         action: drop
 """
         
+        if self.dry_run:
+            # In dry-run mode, just add the configuration content to the document
+            self._add_to_document("")
+            self._add_to_document("### Prometheus Configuration")
+            self._add_to_document("")
+            self._add_to_document("```yaml")
+            self._add_to_document(prometheus_config)
+            self._add_to_document("```")
+            self._add_to_document("")
+            print(f"{Colors.GREEN}✓ Prometheus configuration created{Colors.END}")
+            return True
+        
         # Write config file
         with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
             f.write(prometheus_config)
@@ -1376,10 +1388,12 @@ scrape_configs:
         
         if self._execute_commands(config_commands):
             print(f"{Colors.GREEN}✓ Prometheus configuration created{Colors.END}")
+            os.unlink(temp_file)
+            return True
         else:
             print(f"{Colors.RED}✗ Prometheus configuration failed{Colors.END}")
-        
-        os.unlink(temp_file)
+            os.unlink(temp_file)
+            return False
 
     def section_grafana(self):
         """Section 7: Grafana"""
