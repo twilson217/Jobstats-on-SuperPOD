@@ -1322,16 +1322,19 @@ rm /tmp/prometheus.service''',
         """Create Prometheus configuration file."""
         print(f"\n{Colors.BOLD}{Colors.YELLOW}Creating Prometheus configuration...{Colors.END}")
         
-        # Build targets list
-        targets = []
-        for node in self.config['systems']['dgx_nodes']:
-            targets.extend([
-                f"        - '{node}:{self.config['node_exporter_port']}'  # node_exporter",
-                f"        - '{node}:{self.config['cgroup_exporter_port']}'  # cgroup_exporter",
-                f"        - '{node}:{self.config['nvidia_gpu_exporter_port']}'  # nvidia_gpu_exporter"
-            ])
+        # Build targets list for each exporter
+        node_targets = []
+        cgroup_targets = []
+        gpu_targets = []
         
-        targets_yaml = '\n'.join(targets)
+        for node in self.config['systems']['dgx_nodes']:
+            node_targets.append(f"        - '{node}:{self.config['node_exporter_port']}'")
+            cgroup_targets.append(f"        - '{node}:{self.config['cgroup_exporter_port']}'")
+            gpu_targets.append(f"        - '{node}:{self.config['nvidia_gpu_exporter_port']}'")
+        
+        node_targets_yaml = '\n'.join(node_targets)
+        cgroup_targets_yaml = '\n'.join(cgroup_targets)
+        gpu_targets_yaml = '\n'.join(gpu_targets)
         
         prometheus_config = f"""global:
   scrape_interval: 30s
@@ -1344,16 +1347,32 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:{self.config['prometheus_port']}']
 
-  - job_name: 'dgx-nodes'
-    scrape_interval: 30s
-    scrape_timeout: 30s
+  - job_name: 'node_exporter'
     static_configs:
       - targets: 
-{targets_yaml}
+{node_targets_yaml}
     metric_relabel_configs:
+      - target_label: cluster
+        replacement: {self.config['cluster_name']}
       - source_labels: [__name__]
         regex: '^go_.*'
         action: drop
+
+  - job_name: 'cgroup_exporter'
+    static_configs:
+      - targets: 
+{cgroup_targets_yaml}
+    metric_relabel_configs:
+      - target_label: cluster
+        replacement: {self.config['cluster_name']}
+
+  - job_name: 'nvidia_gpu_exporter'
+    static_configs:
+      - targets: 
+{gpu_targets_yaml}
+    metric_relabel_configs:
+      - target_label: cluster
+        replacement: {self.config['cluster_name']}
 """
         
         if self.dry_run:
