@@ -179,7 +179,7 @@ The `automation/configs/` directory contains example configurations for differen
 - `config-existing-monitoring.json` - For existing Prometheus/Grafana setups
 - `config-category-management.json` - For BCM category-based service management
 
-## System Requirements
+## Prerequisites
 
 - DGX system with BCM management
 - Slurm workload manager with cgroup support
@@ -189,16 +189,96 @@ The `automation/configs/` directory contains example configurations for differen
 - Git (for cloning repositories)
 - Internet access (for downloading components)
 
+## Dependencies
+
+The following repositories are required for jobstats deployment:
+
+### Required Repositories
+
+| Component | Repository | Purpose | Used On |
+|-----------|------------|---------|---------|
+| **jobstats** | [PrincetonUniversity/jobstats](https://github.com/PrincetonUniversity/jobstats) | Main monitoring platform, prolog/epilog scripts, command-line tool | Slurm Controller, Login Nodes |
+| **cgroup_exporter** | [PrincetonUniversity/cgroup_exporter](https://github.com/PrincetonUniversity/cgroup_exporter) | Collects CPU job metrics from cgroups | DGX Compute Nodes |
+| **nvidia_gpu_prometheus_exporter** | [PrincetonUniversity/nvidia_gpu_prometheus_exporter](https://github.com/PrincetonUniversity/nvidia_gpu_prometheus_exporter) | Collects GPU metrics via nvidia-smi | DGX Compute Nodes |
+| **node_exporter** | [prometheus/node_exporter](https://github.com/prometheus/node_exporter) | Collects system metrics | DGX Compute Nodes |
+
+### Repository Distribution
+
+**IMPORTANT**: The repositories need to be available on the systems where they will be used:
+
+- **Slurm Controller Node**: Needs `jobstats` repository for prolog/epilog scripts
+- **Login Nodes**: Needs `jobstats` repository for command-line tool
+- **DGX Compute Nodes**: Needs all exporter repositories for building binaries
+- **Prometheus Server**: No repositories needed (uses pre-built binaries)
+
+**Repository Distribution**: Clone repositories on each system that needs them.
+
+## Network Connectivity Requirements
+
+### Required Network Connectivity
+
+**Prometheus Server must be able to reach:**
+- All DGX nodes on ports 9100, 9306, and 9445
+
+**Login Nodes must be able to reach:**
+- Prometheus server on port 9090
+
+**Grafana Server must be able to reach:**
+- Prometheus server on port 9090
+
+**Users must be able to reach:**
+- Grafana server on port 3000
+
+### Port Configuration
+
+| Service | Port | Description | Required On |
+|---------|------|-------------|-------------|
+| node_exporter | 9100 | System metrics | DGX nodes only |
+| cgroup_exporter | 9306 | CPU job metrics | DGX nodes only |
+| nvidia_gpu_prometheus_exporter | 9445 | GPU metrics | DGX nodes only |
+| prometheus | 9090 | Metrics database | Prometheus server |
+| grafana | 3000 | Web dashboard | Grafana server |
+
 ## Architecture
 
-The jobstats platform consists of several components distributed across different systems:
+The jobstats platform consists of several components distributed across different systems in production:
 
-- **BCM Head Node**: Cluster management (no jobstats components required)
-- **Slurm Controller Node**: Slurm controller, accounting database, and prolog/epilog scripts
-- **Slurm Login Nodes**: jobstats command-line tool and Python dependencies
-- **DGX Compute Nodes**: Exporters for CPU, GPU, and system metrics
-- **Prometheus Server**: Time-series database for metrics collection
-- **Grafana Server**: Web interface for visualization and dashboards
+### Production System Architecture
+
+**BCM Head Node:**
+- BCM cluster management (no jobstats components required)
+
+**Slurm Controller Node:**
+- Slurm controller and accounting database
+- Slurm prolog/epilog scripts for job tracking
+
+**Slurm Login Nodes:**
+- jobstats command-line tool (where users run job analysis)
+- Python dependencies for jobstats
+
+**DGX Compute Nodes (workload nodes):**
+- cgroup_exporter (collects CPU job metrics from /slurm cgroup filesystem)
+- nvidia_gpu_prometheus_exporter (collects GPU metrics via nvidia-smi)
+- prometheus node_exporter (collects system metrics)
+
+**Prometheus Server:**
+- Prometheus time-series database
+- Scrapes metrics from all DGX nodes
+
+**Grafana Server:**
+- Web interface for visualization and dashboards
+
+### Component Distribution
+
+| Component | BCM Head | Slurm Controller | Login Nodes | DGX Nodes | Prometheus Server | Grafana Server |
+|-----------|----------|------------------|-------------|-----------|-------------------|----------------|
+| cgroup_exporter | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| nvidia_gpu_exporter | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| node_exporter | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| prometheus | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| grafana | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| jobstats command | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ |
+| slurm prolog/epilog | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
 
 ## Support
 
