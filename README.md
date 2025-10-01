@@ -1,4 +1,4 @@
-# DGX Jobstats Deployment
+# Jobstats on SuperPOD Deployment
 
 This repository contains resources for deploying Princeton University's jobstats monitoring platform on NVIDIA DGX SuperPOD systems managed by Base Command Manager (BCM).
 
@@ -11,63 +11,32 @@ Jobstats is a comprehensive job monitoring platform designed for CPU and GPU clu
 - Web-based dashboards via Grafana
 - Command-line tools for job analysis
 
-## Deployment Options
+## Quickstart
 
-This repository provides two approaches for deploying jobstats on your DGX SuperPOD:
+### Getting Started with setup.sh
 
-### 1. Manual Step-by-Step Deployment
+The `setup.sh` script is the recommended starting point for automated Jobstats on SuperPOD deployment. This interactive script:
 
-For complete control over each step of the deployment process, follow the comprehensive manual guide:
+- **Guides you through initial configuration** - Sets up `uv` package manager and generates `config.json`
+- **Detects existing installations** - Checks for existing configurations and dependencies
+- **Provides guided integration** - Optionally runs the guided setup script after configuration
+- **Enables one-command deployment** - Complete setup from zero to deployed jobstats
 
-📖 **[How-to Guide](how-to.md)** - Complete step-by-step instructions for manual deployment
+**Usage:**
+```bash
+chmod +x setup.sh
+./setup.sh
+```
 
-This guide covers:
-- System architecture and component distribution
-- Prerequisites and repository setup
-- BCM-specific configuration requirements
-- Manual installation on each system type
-- Network and firewall configuration
-- Verification and troubleshooting
+### Automated Deployment
 
-### 2. Automated Deployment
+For automated deployment with guided configuration, see the [Automation Guide](automation/README.md) for detailed information about running `automation/guided_setup.py` and other automated deployment options.
 
-For streamlined deployment using Python automation scripts:
+### Manual Deployment
 
-🤖 **[Automation Guide](automation/README.md)** - Automated deployment with Python scripts
+For manual step-by-step deployment, see [How-To_template.md](How-To_template.md) for comprehensive instructions covering all aspects of the deployment process.
 
-The automation provides:
-- Automated dependency installation
-- BCM configuration verification
-- Shared host support
-- Existing monitoring infrastructure support
-- BCM imaging guidance
-- Dry-run mode for testing
-
-## Quick Start
-
-### For Manual Deployment
-1. Read the [How-to Guide](how-to.md)
-2. Follow the step-by-step instructions for your environment
-
-### For Automated Deployment
-1. Review the [Automation Guide](automation/README.md)
-2. Choose an appropriate configuration file from `automation/configs/`
-3. Run the deployment script:
-   ```bash
-   cd automation
-   python deploy_jobstats.py --config config.json
-   ```
-
-## Configuration Files
-
-The `automation/configs/` directory contains example configurations for different deployment scenarios:
-
-- `config.json.template` - Template for custom configurations
-- `config-shared-hosts.json` - For environments with shared hosts
-- `config-existing-monitoring.json` - For existing Prometheus/Grafana setups
-- `config-category-management.json` - For BCM category-based service management
-
-## System Requirements
+## Prerequisites
 
 - DGX system with BCM management
 - Slurm workload manager with cgroup support
@@ -77,24 +46,100 @@ The `automation/configs/` directory contains example configurations for differen
 - Git (for cloning repositories)
 - Internet access (for downloading components)
 
+## Dependencies
+
+The following repositories are required for jobstats deployment:
+
+### Required Repositories
+
+| Component | Repository | Purpose | Used On |
+|-----------|------------|---------|---------|
+| **jobstats** | [PrincetonUniversity/jobstats](https://github.com/PrincetonUniversity/jobstats) | Main monitoring platform, prolog/epilog scripts, command-line tool | Slurm Controller, Login Nodes |
+| **cgroup_exporter** | [plazonic/cgroup_exporter](https://github.com/plazonic/cgroup_exporter) | Collects CPU job metrics from cgroups | DGX Compute Nodes |
+| **nvidia_gpu_prometheus_exporter** | [plazonic/nvidia_gpu_prometheus_exporter](https://github.com/plazonic/nvidia_gpu_prometheus_exporter) | Collects GPU metrics via nvidia-smi | DGX Compute Nodes |
+| **node_exporter** | [prometheus/node_exporter](https://github.com/prometheus/node_exporter) | Collects system metrics | DGX Compute Nodes |
+
+### Repository Distribution
+
+**IMPORTANT**: The repositories need to be available on the systems where they will be used:
+
+- **Slurm Controller Node**: Needs `jobstats` repository for prolog/epilog scripts
+- **Login Nodes**: Needs `jobstats` repository for command-line tool
+- **DGX Compute Nodes**: Needs all exporter repositories for building binaries
+- **Prometheus Server**: No repositories needed (uses pre-built binaries)
+
+**Repository Distribution**: Clone repositories on each system that needs them.
+
+## Network Connectivity Requirements
+
+### Required Network Connectivity
+
+**Prometheus Server must be able to reach:**
+- All DGX nodes on ports 9100, 9306, and 9445
+
+**Login Nodes must be able to reach:**
+- Prometheus server on port 9090
+
+**Grafana Server must be able to reach:**
+- Prometheus server on port 9090
+
+**Users must be able to reach:**
+- Grafana server on port 3000
+
+### Port Configuration
+
+| Service | Port | Description | Required On |
+|---------|------|-------------|-------------|
+| node_exporter | 9100 | System metrics | DGX nodes only |
+| cgroup_exporter | 9306 | CPU job metrics | DGX nodes only |
+| nvidia_gpu_prometheus_exporter | 9445 | GPU metrics | DGX nodes only |
+| prometheus | 9090 | Metrics database | Prometheus server |
+| grafana | 3000 | Web dashboard | Grafana server |
+
 ## Architecture
 
-The jobstats platform consists of several components distributed across different systems:
+The jobstats platform consists of several components distributed across different systems in production:
 
-- **BCM Head Node**: Cluster management (no jobstats components required)
-- **Slurm Controller Node**: Slurm controller, accounting database, and prolog/epilog scripts
-- **Slurm Login Nodes**: jobstats command-line tool and Python dependencies
-- **DGX Compute Nodes**: Exporters for CPU, GPU, and system metrics
-- **Prometheus Server**: Time-series database for metrics collection
-- **Grafana Server**: Web interface for visualization and dashboards
+### Production System Architecture
 
-## Support
+**BCM Head Node:**
+- BCM cluster management (no jobstats components required)
 
-For issues specific to this DGX deployment:
-1. Check service logs using `journalctl`
-2. Verify BCM configuration changes
-3. Test individual components (exporters, Prometheus, Grafana)
-4. Consult the original Princeton jobstats documentation
+**Slurm Controller Node:**
+- Slurm controller and accounting database
+- Slurm prolog/epilog scripts for job tracking
+
+**Slurm Login Nodes:**
+- jobstats command-line tool (where users run job analysis)
+- Python dependencies for jobstats
+
+**DGX Compute Nodes (workload nodes):**
+- cgroup_exporter (collects CPU job metrics from /slurm cgroup filesystem)
+- nvidia_gpu_prometheus_exporter (collects GPU metrics via nvidia-smi)
+- prometheus node_exporter (collects system metrics)
+
+**Prometheus Server:**
+- Prometheus time-series database
+- Scrapes metrics from all DGX nodes
+
+**Grafana Server:**
+- Web interface for visualization and dashboards
+
+### Component Distribution
+
+| Component | BCM Head | Slurm Controller | Login Nodes | DGX Nodes | Prometheus Server | Grafana Server |
+|-----------|----------|------------------|-------------|-----------|-------------------|----------------|
+| cgroup_exporter | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| nvidia_gpu_exporter | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| node_exporter | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| prometheus | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| grafana | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| jobstats command | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ |
+| slurm prolog/epilog | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+## Troubleshooting
+
+For troubleshooting information, see [Troubleshooting.md](Troubleshooting.md) which covers common issues and solutions for both basic deployment and visual features.
 
 ## Additional Resources
 

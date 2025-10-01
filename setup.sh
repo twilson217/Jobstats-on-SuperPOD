@@ -151,12 +151,52 @@ main() {
         exit 1
     fi
     
-    # Step 3: Collect configuration information
-    print_status "Step 3: Collecting configuration information..."
+    # Step 3: Check for existing configuration
+    print_status "Step 3: Checking for existing configuration..."
+    echo ""
+    
+    local config_file="automation/configs/config.json"
+    local config_dir="automation/configs"
+    
+    # Ensure config directory exists
+    mkdir -p "$config_dir"
+    
+    # Check if config.json already exists
+    if [ -f "$config_file" ]; then
+        echo ""
+        print_warning "Configuration file already exists: $config_file"
+        echo "Current configuration:"
+        cat "$config_file" | head -10
+        echo "..."
+        echo ""
+        read -p "Would you like to overwrite the existing config.json? (y/N): " overwrite_config
+        overwrite_config=$(echo "$overwrite_config" | tr '[:upper:]' '[:lower:]')
+        
+        if [[ "$overwrite_config" != "y" && "$overwrite_config" != "yes" ]]; then
+            print_status "Keeping existing configuration file."
+            print_status "You can manually edit $config_file if needed."
+            echo ""
+            print_status "Next steps:"
+            echo "1. Review your configuration: cat $config_file"
+            echo "2. Run a dry-run deployment:"
+            echo "   uv run python automation/deploy_jobstats.py --config $config_file --dry-run"
+            echo "3. Deploy jobstats:"
+            echo "   uv run python automation/deploy_jobstats.py --config $config_file"
+            echo ""
+            # Skip to guided setup step
+            run_guided_setup_step "$config_file"
+            return 0
+        else
+            print_status "Overwriting existing configuration file..."
+        fi
+    fi
+    
+    # Step 4: Collect configuration information
+    print_status "Step 4: Collecting configuration information..."
     echo ""
     
     # Basic configuration
-    prompt_with_default "Cluster name" "slurm" cluster_name
+    prompt_with_default "BCM wlm cluster name" "slurm" cluster_name
     prompt_with_default "Prometheus server hostname" "prometheus-server" prometheus_server
     prompt_with_default "Grafana server hostname" "grafana-server" grafana_server
     
@@ -197,8 +237,8 @@ main() {
     fi
     
     if [[ "$bcm_category_management" == "true" ]]; then
-        prompt_with_default "Slurm category name" "slurm-category" slurm_category
-        prompt_with_default "Kubernetes category name" "kubernetes-category" kubernetes_category
+        prompt_with_default "BCM category for DGX's running Slurm" "slurm-category" slurm_category
+        prompt_with_default "BCM category for DGX's running Kubernetes" "kubernetes-category" kubernetes_category
     else
         slurm_category="slurm-category"
         kubernetes_category="kubernetes-category"
@@ -225,42 +265,8 @@ main() {
         grafana_server_hosts="[]"
     fi
     
-    # Step 4: Create config.json
-    print_status "Step 4: Creating configuration file..."
-    
-    local config_file="automation/configs/config.json"
-    local config_dir="automation/configs"
-    
-    # Ensure config directory exists
-    mkdir -p "$config_dir"
-    
-    # Check if config.json already exists
-    if [ -f "$config_file" ]; then
-        echo ""
-        print_warning "Configuration file already exists: $config_file"
-        echo "Current configuration:"
-        cat "$config_file" | head -10
-        echo "..."
-        echo ""
-        read -p "Would you like to overwrite the existing config.json? (y/N): " overwrite_config
-        overwrite_config=$(echo "$overwrite_config" | tr '[:upper:]' '[:lower:]')
-        
-        if [[ "$overwrite_config" != "y" && "$overwrite_config" != "yes" ]]; then
-            print_status "Keeping existing configuration file."
-            print_status "You can manually edit $config_file if needed."
-            echo ""
-            print_status "Next steps:"
-            echo "1. Review your configuration: cat $config_file"
-            echo "2. Run a dry-run deployment:"
-            echo "   uv run python automation/deploy_jobstats.py --config $config_file --dry-run"
-            echo "3. Deploy jobstats:"
-            echo "   uv run python automation/deploy_jobstats.py --config $config_file"
-            echo ""
-            return 0
-        else
-            print_status "Overwriting existing configuration file..."
-        fi
-    fi
+    # Step 5: Create config.json
+    print_status "Step 5: Creating configuration file..."
     
     # Create the JSON configuration
     cat > "$config_file" << EOF
@@ -291,7 +297,7 @@ EOF
     
     print_success "Configuration file created: $config_file"
     
-    # Step 5: Display next steps
+    # Step 6: Display next steps
     echo ""
     echo "=========================================="
     print_success "Setup completed successfully!"
@@ -308,7 +314,7 @@ EOF
     print_status "Dry-run output will be saved to: automation/logs/dry-run-output.txt"
     echo ""
     
-    # Step 6: Show configuration summary
+    # Step 7: Show configuration summary
     print_status "Configuration Summary:"
     echo "  Cluster: $cluster_name"
     echo "  Prometheus: $prometheus_server:$prometheus_port"
@@ -319,6 +325,48 @@ EOF
     echo ""
     
     print_success "Setup complete! You can now run the deployment script."
+    
+    # Step 8: Offer to run guided setup
+    run_guided_setup_step "$config_file"
+}
+
+# Function to handle guided setup step
+run_guided_setup_step() {
+    local config_file="$1"
+    
+    echo ""
+    print_status "Step 8: Optional Guided Setup"
+    echo ""
+    print_status "Would you like to run the guided setup process?"
+    print_status "This will walk you through the deployment step-by-step with detailed explanations."
+    echo ""
+    read -p "Run guided setup? (y/N): " run_guided_setup
+    run_guided_setup=$(echo "$run_guided_setup" | tr '[:upper:]' '[:lower:]')
+    
+    if [[ "$run_guided_setup" == "y" || "$run_guided_setup" == "yes" ]]; then
+        echo ""
+        print_status "Guided setup options:"
+        echo "1. Full automation - Execute all commands automatically"
+        echo "2. Dry run - Generate documentation only (no commands executed)"
+        echo ""
+        read -p "Choose option (1 or 2): " guided_option
+        
+        if [[ "$guided_option" == "1" ]]; then
+            print_status "Running guided setup with full automation..."
+            echo ""
+            uv run python automation/guided_setup.py --config "$config_file"
+        elif [[ "$guided_option" == "2" ]]; then
+            print_status "Running guided setup in dry-run mode..."
+            echo ""
+            uv run python automation/guided_setup.py --config "$config_file" --dry-run
+            echo ""
+            print_success "Documentation generated! Check automation/logs/guided_setup_document.md"
+        else
+            print_warning "Invalid option. Skipping guided setup."
+        fi
+    else
+        print_status "Skipping guided setup."
+    fi
 }
 
 # Run main function
