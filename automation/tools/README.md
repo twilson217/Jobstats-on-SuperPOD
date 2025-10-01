@@ -99,6 +99,18 @@ python3 fix_jobstats_alloc_cores.py
 
 ## Workload Testing
 
+### GPU Test with GPU Burn (not in this repo)
+
+```bash
+# On DGX
+apt install cuda-toolkit-12-8
+git clone https://github.com/wilicc/gpu-burn 
+cd gpu-burn && make 
+
+# On Slurm Submit Node
+srun --gpus=1 gpu_burn 600 --nodelist <dgx> # 600 seconds
+```
+
 ### cpu_load_test.py
 
 **Purpose**: CPU load test script for jobstats validation that generates sustained CPU load.
