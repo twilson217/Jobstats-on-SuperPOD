@@ -55,8 +55,8 @@ The following repositories are required for jobstats deployment:
 | Component | Repository | Purpose | Used On |
 |-----------|------------|---------|---------|
 | **jobstats** | [PrincetonUniversity/jobstats](https://github.com/PrincetonUniversity/jobstats) | Main monitoring platform, prolog/epilog scripts, command-line tool | Slurm Controller, Login Nodes |
-| **cgroup_exporter** | [PrincetonUniversity/cgroup_exporter](https://github.com/PrincetonUniversity/cgroup_exporter) | Collects CPU job metrics from cgroups | DGX Compute Nodes |
-| **nvidia_gpu_prometheus_exporter** | [PrincetonUniversity/nvidia_gpu_prometheus_exporter](https://github.com/PrincetonUniversity/nvidia_gpu_prometheus_exporter) | Collects GPU metrics via nvidia-smi | DGX Compute Nodes |
+| **cgroup_exporter** | [treydock/cgroup_exporter](https://github.com/treydock/cgroup_exporter) | Collects CPU job metrics from cgroups | DGX Compute Nodes |
+| **nvidia_gpu_prometheus_exporter** | [plazonic/nvidia_gpu_prometheus_exporter](https://github.com/plazonic/nvidia_gpu_prometheus_exporter) | Collects GPU metrics via nvidia-smi | DGX Compute Nodes |
 | **node_exporter** | [prometheus/node_exporter](https://github.com/prometheus/node_exporter) | Collects system metrics | DGX Compute Nodes |
 
 ### Repository Distribution
