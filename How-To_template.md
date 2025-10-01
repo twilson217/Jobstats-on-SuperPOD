@@ -1102,168 +1102,274 @@ are run when your systems boot.
 
 # ----- NOT INCLUDED IN automation/logs/guided_setup_document.md -----
 
-## BCM Node Imaging Workflow
+## Testing Visual Features and Grafana Dashboards
 
-**IMPORTANT**: This section contains additional steps that should be performed after completing the guided setup process.
+**IMPORTANT**: This section covers testing the visual and UI-based features of jobstats that are not included in the automated guided setup process.
 
 ### Overview
 
-For BCM-managed systems, the recommended approach is to deploy jobstats on one representative node of each type, then capture and deploy the image using BCM's imaging system.
+After completing the basic jobstats deployment, you now have access to several powerful visual tools for monitoring and analyzing job performance:
 
-### Imaging Process
+1. **Grafana Dashboards** - Comprehensive visual monitoring
+2. **Open OnDemand Integration** - Web-based job statistics access
+3. **Additional Monitoring Tools** - GPU dashboard and utilization reports
 
-#### Step 1: Deploy on Representative Nodes
+### Prerequisites for Visual Testing
 
-Deploy jobstats on one node of each type (DGX, Slurm controller, login node) following the manual deployment steps in this guide.
+Before testing the visual features, ensure you have:
 
-#### Step 2: Capture Images
+- ✅ **Completed the basic jobstats deployment** (all previous sections)
+- ✅ **Prometheus server running** and collecting metrics
+- ✅ **Grafana server running** with Prometheus data source configured
+- ✅ **At least one completed Slurm job** with GPU usage (for testing)
+- ✅ **Network access** to Grafana web interface
 
-After successful deployment, capture the image for each node type:
+### 1. Grafana Dashboard Testing
 
+#### 1.1 Import the Jobstats Dashboard
+
+The jobstats repository includes a pre-built Grafana dashboard specifically designed for job monitoring.
+
+**Step 1: Access Grafana**
 ```bash
-# Capture DGX node image
-cmsh -c "device;use dgx-node-01;grabimage -w"
-
-# Capture Slurm controller image
-cmsh -c "device;use slurm-controller-01;grabimage -w"
-
-# Capture login node image
-cmsh -c "device;use login-node-01;grabimage -w"
+# Open Grafana in your web browser
+# Default URL: http://<monitoring server>:3000
+# Default credentials: admin/admin (or admin/jobstats123 if changed during setup)
 ```
 
-#### Step 3: Deploy to All Nodes
+**Step 2: Import the Dashboard**
+1. In Grafana, go to **"+" → "Import"**
+2. Click **"Upload JSON file"**
+3. Upload the file: `/opt/jobstats-deployment/jobstats/grafana/Single_Job_Stats.json`
+4. Click **"Load"**
+5. Select your Prometheus data source
+6. Click **"Import"**
 
-BCM will automatically deploy the captured images to all nodes of the same type.
+#### 1.2 Test the Dashboard with a Real Job
 
-### Imaging Safety Analysis
-
-**✅ All jobstats files are safe for BCM imaging:**
-- **Shared storage files** (`/cm/shared/apps/slurm/var/cm/`) - meant to be identical
-- **Binary files** (`/usr/local/bin/`) - identical across all nodes
-- **Systemd services** (`/etc/systemd/system/`) - identical across all nodes
-- **Configuration files** - use hostname templating that works on each node
-- **No host-specific files** created that would cause conflicts
-
-**No exclude list modifications needed** - all jobstats files are compatible with BCM imaging.
-
-### BCM Category-Based Service Management
-
-Jobstats services are tied to the Slurm category so they automatically start/stop when nodes switch between categories. This ensures:
-
-- **Same software image** used for all DGX nodes
-- **Automatic service management** based on category assignment
-- **No manual intervention** when switching between Slurm and Kubernetes
-- **Clean separation** of services by workload type
-
-#### How BCM Category Service Management Works
-
-BCM provides category-based service management where:
-1. **Services are defined at category level** using `cmsh` or Base View
-2. **When a node changes category**, BCM automatically:
-   - Stops services from the old category (if `autostart` was enabled)
-   - Starts services from the new category (if `autostart` is enabled)
-3. **No reboot required** - services are managed dynamically
-4. **Same image used** - only service configuration changes
-
-#### Implementation Steps
-
-##### Step 1: Create Slurm Category (if not exists)
+**Step 1: Find a Completed Job ID**
 ```bash
-# Check existing categories
-cmsh -c "category; list"
+# On <slurm controller>, find a recent completed job
+squeue -u $USER --states=CD --format="%.10i %.8u %.2t %.10M %.6D %R" | head -5
 
-# Clone default category for Slurm nodes (if needed)
-cmsh -c "category; clone default slurm-category; commit"
+# Or check your job history
+sacct -u $USER --start=today --format=JobID,JobName,State,ExitCode | head -10
 ```
 
-##### Step 2: Add Jobstats Services to Slurm Category
+**Step 2: Use the Dashboard**
+1. Open the **"Single Job Stats"** dashboard in Grafana
+2. In the **"Slurm JobID"** field, enter your job ID
+3. Click **"Apply"** or press Enter
+4. The dashboard will automatically populate with data for that job
+
+#### 1.3 Dashboard Features to Test
+
+The dashboard provides comprehensive visualizations across several categories:
+
+**Job-Level Metrics (CPU & Memory):**
+- **CPU Utilization**: User, System, and Total CPU usage over time
+- **CPU Memory Utilization**: Total allocated, RSS, Cache, and Used memory
+
+**Job-Level Metrics (GPU):**
+- **GPU Utilization**: Percentage utilization for each GPU
+- **GPU Memory Utilization**: Memory usage in bytes for each GPU
+- **GPU Temperature**: Temperature monitoring for each GPU
+- **GPU Power Usage**: Power consumption in milliwatts
+
+**Node-Level Metrics:**
+- **CPU Percentage Utilization**: System, User, IO-Wait, and Total
+- **Total Memory Utilization**: Total, Used, Available, Buffers, Free, Cached
+- **CPU Frequency**: Average frequency across all CPUs with throttling info
+- **NFS Statistics**: Read/write requests and metadata operations
+- **Local Disk I/O**: Read/write bytes and IOPS
+- **GPFS Bandwidth**: File system read/write operations
+- **Infiniband Metrics**: Throughput, packet rates, and error monitoring
+
+### 2. Open OnDemand Integration Testing
+
+#### 2.1 Deploy the OOD Helper App
+
+The OOD helper provides a web interface for easy access to job statistics.
+
+**Step 1: Install the OOD Helper**
 ```bash
-# Add jobstats services to the Slurm category
-cmsh -c "category; use slurm-category; services; add cgroup_exporter"
-cmsh -c "category; use slurm-category; services; add node_exporter" 
-cmsh -c "category; use slurm-category; services; add nvidia_gpu_prometheus_exporter"
+# On <monitoring server> or OOD server
+# Copy the OOD helper to the OOD apps directory
+cp -r /opt/jobstats-deployment/jobstats/ood-jobstats-helper /var/www/ood/apps/sys/jobstats
 
-# Configure each service with autostart and monitoring
-cmsh -c "category; use slurm-category; services; use cgroup_exporter; set autostart yes; set monitored yes; commit"
-cmsh -c "category; use slurm-category; services; use node_exporter; set autostart yes; set monitored yes; commit"
-cmsh -c "category; use slurm-category; services; use nvidia_gpu_prometheus_exporter; set autostart yes; set monitored yes; commit"
+# Set proper permissions
+chown -R apache:apache /var/www/ood/apps/sys/jobstats
+chmod -R 755 /var/www/ood/apps/sys/jobstats
 ```
 
-##### Step 3: Assign Nodes to Categories
+**Step 2: Configure OOD Integration**
 ```bash
-# Assign DGX nodes to Slurm category
-cmsh -c "device; use dgx-node-01; set category slurm-category; commit"
-cmsh -c "device; use dgx-node-02; set category slurm-category; commit"
-
-# Assign DGX nodes to Kubernetes category (when needed)
-cmsh -c "device; use dgx-node-01; set category kubernetes-category; commit"
+# Edit the OOD configuration to point to your Grafana instance
+# This typically involves updating the OOD configuration files
+# to include the Grafana URL and dashboard settings
 ```
 
-### Category-Based Configuration Example
+#### 2.2 Test OOD Integration
 
-```json
-{
-  "bcm_category_management": true,
-  "slurm_category": "slurm-category",
-  "kubernetes_category": "kubernetes-category",
-  "systems": {
-    "dgx_nodes": ["dgx-node-01", "dgx-node-02", "dgx-node-03"],
-    "slurm_dgx_nodes": ["dgx-node-01", "dgx-node-02"],
-    "kubernetes_dgx_nodes": ["dgx-node-03"]
-  }
-}
-```
-
-### Workflow Example
-
-#### Initial Setup
+**Step 1: Access the OOD Interface**
 ```bash
-# 1. Deploy jobstats on representative DGX node following manual deployment steps
-
-# 2. Add services to Slurm category
-cmsh -c "category; use slurm-category; services; add cgroup_exporter; set autostart yes; set monitored yes; commit"
-
-# 3. Assign nodes to Slurm category
-cmsh -c "device; use dgx-node-01; set category slurm-category; commit"
+# Open OOD in your web browser
+# URL: http://<ood server>/pun/sys/jobstats
 ```
 
-#### Switching to Kubernetes
+**Step 2: Test Job Lookup**
+1. Enter a job ID in the web form
+2. Select your cluster from the dropdown
+3. Click submit
+4. Verify that it redirects to the correct Grafana dashboard with the job data
+
+**Step 3: Test Direct URL Access**
 ```bash
-# 1. Change node category to Kubernetes
-cmsh -c "device; use dgx-node-01; set category kubernetes-category; commit"
-
-# 2. Jobstats services automatically stop
-# 3. Kubernetes services automatically start
-# 4. No reboot required
+# Test direct URL access (if configured)
+# URL: http://<ood server>/pun/sys/jobstats/<cluster>/<jobid>
+# Example: http://<ood server>/pun/sys/jobstats/slurm/12345
 ```
 
-#### Switching Back to Slurm
+### 3. Additional Monitoring Tools
+
+#### 3.1 GPU Dashboard (gpudash)
+
+The `gpudash` tool provides a text-based real-time view of GPU utilization across the cluster.
+
+**Step 1: Install gpudash**
 ```bash
-# 1. Change node category back to Slurm
-cmsh -c "device; use dgx-node-01; set category slurm-category; commit"
+# Clone the gpudash repository
+cd /opt/jobstats-deployment
+git clone https://github.com/PrincetonUniversity/gpudash.git
+cd gpudash
 
-# 2. Jobstats services automatically start
-# 3. Kubernetes services automatically stop
-# 4. No reboot required
+# Install Python dependencies
+pip3 install blessed requests
+
+# Make the script executable
+chmod +x gpudash.py
 ```
 
-### Verification Commands
+**Step 2: Test gpudash**
 ```bash
-# Check service status by category
-cmsh -c "category; use slurm-category; services; status"
+# Run gpudash to see current GPU utilization
+python3 gpudash.py
 
-# Check node category assignment
-cmsh -c "device; use dgx-node-01; show category"
+# Run with custom parameters
+python3 gpudash.py --columns 5 --interval 5
 
-# Check service status on specific node
-cmsh -c "device; use dgx-node-01; services; status"
+# Check for available GPUs
+python3 gpudash.py --available
 ```
 
-### Benefits
+#### 3.2 Job Defense Shield
 
-1. **Dynamic Service Management**: Services automatically start/stop with category changes
-2. **Same Image**: All DGX nodes use identical software image
-3. **No Reboots**: Category changes don't require node reboots
-4. **Centralized Control**: All service management through BCM
-5. **Clean Separation**: Slurm and Kubernetes services are isolated
-6. **Easy Switching**: Simple category assignment changes node behavior
+Job Defense Shield provides automated monitoring and alerting for underutilized jobs.
+
+**Step 1: Install Job Defense Shield**
+```bash
+# Clone the repository
+cd /opt/jobstats-deployment
+git clone https://github.com/PrincetonUniversity/job_defense_shield.git
+cd job_defense_shield
+
+# Install dependencies
+pip3 install -r requirements.txt
+```
+
+**Step 2: Configure and Test**
+```bash
+# Edit configuration file
+cp config.json.example config.json
+# Update config.json with your Prometheus server details
+
+# Run a test report
+python3 job_defense_shield.py --config config.json --dry-run
+
+# Generate utilization report
+python3 job_defense_shield.py --config config.json --report
+```
+
+### 4. Verification Checklist
+
+Use this checklist to verify all visual features are working correctly:
+
+#### Grafana Dashboard
+- [ ] Dashboard imports successfully without errors
+- [ ] Job ID input field accepts valid job IDs
+- [ ] CPU utilization graphs display data
+- [ ] GPU utilization graphs display data
+- [ ] Memory utilization graphs display data
+- [ ] Node-level metrics show data
+- [ ] Time range selector works correctly
+- [ ] All panels load without "No data" errors
+
+#### Open OnDemand Integration
+- [ ] OOD helper app loads in web browser
+- [ ] Job ID lookup returns correct results
+- [ ] Direct URL access works
+- [ ] Grafana dashboard opens with correct job data
+- [ ] Cluster selection works properly
+
+#### Additional Tools
+- [ ] gpudash displays current GPU status
+- [ ] Job Defense Shield generates reports
+- [ ] All tools can connect to Prometheus
+- [ ] Error handling works for invalid inputs
+
+### 5. Troubleshooting Visual Features
+
+#### Common Issues and Solutions
+
+**Dashboard Shows "No Data":**
+```bash
+# Check if Prometheus is collecting data
+curl -s http://<monitoring server>:9090/api/v1/query?query=up
+
+# Verify job ID exists in Prometheus
+curl -s "http://<monitoring server>:9090/api/v1/query?query=cgroup_cpus{jobid=\"<jobid>\"}"
+```
+
+**Grafana Dashboard Import Fails:**
+- Ensure Grafana version is 8.1.2 or compatible
+- Check that Prometheus data source is properly configured
+- Verify JSON file is not corrupted
+
+**OOD Helper Not Working:**
+- Check OOD server logs: `/var/log/ood/passenger.log`
+- Verify file permissions on the app directory
+- Ensure OOD is configured to allow the jobstats app
+
+**Tools Can't Connect to Prometheus:**
+- Verify Prometheus server is running: `systemctl status prometheus`
+- Check network connectivity: `telnet <monitoring server> 9090`
+- Verify firewall rules allow connections
+
+### 6. Advanced Usage
+
+#### Custom Dashboard Creation
+- Create additional Grafana dashboards for specific use cases
+- Add custom metrics and visualizations
+- Set up automated alerts based on job performance
+
+#### Integration with Other Tools
+- Connect jobstats data to external monitoring systems
+- Integrate with ticketing systems for automated reporting
+- Set up automated email notifications for job performance issues
+
+#### Performance Optimization
+- Tune Prometheus retention settings for your needs
+- Optimize Grafana dashboard queries for better performance
+- Set up data archiving for long-term storage
+
+### 7. Next Steps
+
+After successfully testing the visual features:
+
+1. **Train Users**: Provide documentation on how to use the Grafana dashboards
+2. **Set Up Monitoring**: Configure alerts for system health and job performance
+3. **Customize Dashboards**: Modify dashboards for your specific cluster needs
+4. **Integrate with Workflows**: Incorporate jobstats into your existing monitoring workflows
+5. **Scale Testing**: Test with multiple concurrent jobs and high cluster utilization
+
+The visual features of jobstats provide powerful insights into job performance and system utilization, making it an invaluable tool for both users and administrators of HPC clusters.
