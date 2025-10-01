@@ -4,20 +4,12 @@ This directory contains various tools for testing, validating, and managing the 
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Tools](#tools)
-  - [validate_jobstats_deployment.py](#validate_jobstats_deploymentpy)
-  - [convert_pdfs.sh](#convert_pdfssh)
-  - [fix_jobstats_timelimit.py](#fix_jobstats_timelimitpy)
-- [Usage Examples](#usage-examples)
-- [Prerequisites](#prerequisites)
-- [Troubleshooting](#troubleshooting)
+- [Deployment Testing](#deployment-testing)
+- [Deployment Fixes/Patches](#deployment-fixespatches)
+- [Workload Testing](#workload-testing)
+- [Misc](#misc)
 
-## Overview
-
-The jobstats platform provides comprehensive monitoring and statistics for Slurm job execution, including CPU usage, GPU utilization, memory consumption, and other resource metrics. These tools help validate that the deployment is working correctly and provide test workloads to generate meaningful data.
-
-## Tools
+## Deployment Testing
 
 ### validate_jobstats_deployment.py
 
@@ -49,23 +41,7 @@ python3 validate_jobstats_deployment.py --sections "1,2,3"
 - Checks BCM configuration
 - Provides detailed pass/fail reporting
 
-### convert_pdfs.sh
-
-**Purpose**: Utility script for converting PDF files (legacy tool).
-
-**Use Case**:
-- Convert PDF documentation
-- Batch PDF processing
-- Documentation management
-
-**Usage**:
-```bash
-# Convert single PDF
-./convert_pdfs.sh input.pdf
-
-# Convert multiple PDFs
-./convert_pdfs.sh *.pdf
-```
+## Deployment Fixes/Patches
 
 ### fix_jobstats_timelimit.py
 
@@ -94,29 +70,111 @@ python3 fix_jobstats_timelimit.py
 - Built-in testing to verify fix works
 - Handles both string comparison and formatting issues
 
-## Usage Examples
+### fix_jobstats_alloc_cores.py
 
-### Complete Deployment Validation
+**Purpose**: Fix for jobstats alloc/cores division error where alloc is a string but cores is an integer.
 
+**Use Case**:
+- Fix TypeError in output_formatters.py where alloc/cores division fails
+- Handle string vs integer type mismatches
+- Resolve division errors in memory allocation calculations
+
+**Usage**:
 ```bash
-# 1. Validate the entire deployment
-python3 validate_jobstats_deployment.py
+# Run the fix (must be run on login node where jobstats is installed)
+python3 fix_jobstats_alloc_cores.py
 
-# 2. Check jobstats output for existing jobs
-jobstats -j <job_id>
+# The script will:
+# - Create a backup of the original file
+# - Apply fixes to handle string alloc values
+# - Test the fix with a recent job
+# - Provide detailed error handling and recovery
 ```
 
-### Jobstats Fix Workflow
+**Features**:
+- Comprehensive error handling (ValueError, TypeError, ZeroDivisionError)
+- Pattern matching fallback if exact line not found
+- Built-in testing functionality
+- Automatic backup creation with rollback capability
 
+## Workload Testing
+
+### cpu_load_test.py
+
+**Purpose**: CPU load test script for jobstats validation that generates sustained CPU load.
+
+**Use Case**:
+- Generate realistic CPU utilization patterns for testing
+- Validate jobstats CPU metrics collection
+- Create multi-process CPU workloads
+- Test jobstats under various CPU loads
+
+**Usage**:
 ```bash
-# 1. Fix jobstats UNLIMITED time limit issues
-python3 fix_jobstats_timelimit.py
+# Run with default settings (4 processes, 60 seconds)
+python3 cpu_load_test.py
 
-# 2. Test the fix
-python3 fix_jobstats_timelimit.py --test
+# Run with custom parameters
+python3 cpu_load_test.py --processes 8 --duration 120 --intensity 80
 
-# 3. Verify jobstats works correctly
-jobstats -j <job_id>
+# Dry-run mode to see what would be executed
+python3 cpu_load_test.py --dry-run
+```
+
+**Features**:
+- Multi-process CPU intensive tasks
+- Configurable duration and intensity
+- Dry-run mode for testing
+- Real-time progress reporting
+- Automatic cleanup on completion
+
+### cpu_test_job.sh
+
+**Purpose**: Slurm job script for running CPU load tests in a cluster environment.
+
+**Use Case**:
+- Submit CPU load tests as Slurm jobs
+- Test jobstats with actual job execution
+- Generate job statistics for validation
+- Run CPU tests on specific partitions/nodes
+
+**Usage**:
+```bash
+# Submit the job
+sbatch cpu_test_job.sh
+
+# Check job status
+squeue -u $USER
+
+# View job output
+cat cpu_test_<job_id>.out
+```
+
+**Features**:
+- Pre-configured Slurm job parameters
+- Automatic module loading
+- CPU load generation with multiple processes
+- Job output and error logging
+- Integration with jobstats monitoring
+
+## Misc
+
+### convert_pdfs.sh
+
+**Purpose**: Utility script for converting PDF files (legacy tool).
+
+**Use Case**:
+- Convert PDF documentation
+- Batch PDF processing
+- Documentation management
+
+**Usage**:
+```bash
+# Convert single PDF
+./convert_pdfs.sh input.pdf
+
+# Convert multiple PDFs
+./convert_pdfs.sh *.pdf
 ```
 
 ## Prerequisites
@@ -125,122 +183,23 @@ jobstats -j <job_id>
 - BCM (Bright Cluster Manager) system
 - Slurm workload manager
 - Python 3.6+
-- CUDA (for GPU tests)
 - Access to jobstats deployment
 
 ### Required Modules
 - `slurm` - Slurm commands
-- `cuda` - CUDA toolkit
 - `python` - Python environment
 
 ### Required Packages
-- `torch` - PyTorch (auto-installed by test scripts)
-- `numpy` - Numerical computing (auto-installed)
 - `requests` - HTTP library (for validation)
+- `multiprocessing` - Built-in Python module (for CPU tests)
 
 ### Permissions
 - Ability to submit Slurm jobs
 - Access to target partitions and nodes
 - Read access to jobstats configuration
 
-## Troubleshooting
-
-### Common Issues
-
-#### 1. "sbatch not found" Error
-```bash
-# Load Slurm module
-module load slurm
-
-# Or set PATH
-export PATH=/cm/shared/apps/slurm/bin:$PATH
-```
-
-#### 2. "CUDA not available" Error
-```bash
-# Load CUDA module
-module load cuda
-
-# Check CUDA availability
-nvidia-smi
-```
-
-#### 3. "jobstats command not found"
-```bash
-# Check if jobstats is installed
-which jobstats
-
-# Check symlink
-ls -la /usr/local/bin/jobstats
-```
-
-#### 4. Dry-run Output Truncated
-The dry-run functionality works correctly but may appear truncated in some terminals. The complete output is generated and can be redirected to a file:
-
-```bash
-./test_jobstats_pytorch.sh --dry-run --duration 2 > dry_run_output.txt
-cat dry_run_output.txt
-```
-
-#### 5. Permission Denied
-```bash
-# Make scripts executable
-chmod +x *.sh
-
-# Check file permissions
-ls -la *.sh
-```
-
-### Validation Failures
-
-If validation tests fail, check:
-
-1. **Services Status**:
-   ```bash
-   systemctl status prometheus
-   systemctl status grafana-server
-   systemctl status cgroup_exporter
-   systemctl status nvidia_gpu_prometheus_exporter
-   ```
-
-2. **Port Accessibility**:
-   ```bash
-   netstat -tlnp | grep -E "(9090|3000|9100|9306|9445)"
-   ```
-
-3. **Configuration Files**:
-   ```bash
-   ls -la /etc/prometheus/prometheus.yml
-   ls -la /etc/grafana/grafana.ini
-   ```
-
-4. **Log Files**:
-   ```bash
-   journalctl -u prometheus -f
-   journalctl -u grafana-server -f
-   ```
-
-### Getting Help
-
-1. **Check Logs**: All tools provide detailed error messages
-2. **Dry-run Mode**: Use `--dry-run` to see what would be executed
-3. **Validation Script**: Run `validate_jobstats_deployment.py` for comprehensive diagnostics
-4. **Manual Testing**: Use individual tools to isolate issues
-
-## Contributing
-
-When adding new tools to this directory:
-
-1. Follow the naming convention: `test_jobstats_*.py` or `test_jobstats_*.sh`
-2. Include comprehensive help text (`--help`)
-3. Support both interactive and non-interactive modes
-4. Include dry-run functionality where appropriate
-5. Update this README.md with tool documentation
-6. Test thoroughly on BCM systems
-
 ## Related Documentation
 
-- [Jobstats Setup Guide](../../docs/setup/)
-- [BCM Configuration Guide](../../docs/bcm/)
-- [Troubleshooting Guide](../../docs/troubleshooting/)
 - [Main README](../../README.md)
+- [Automation README](../README.md)
+- [Troubleshooting Guide](../../Troubleshooting.md)

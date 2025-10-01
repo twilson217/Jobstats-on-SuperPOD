@@ -11,8 +11,9 @@ This comprehensive troubleshooting guide documents the issues encountered during
 5. [BCM-Specific Issues](#bcm-specific-issues)
 6. [Jobstats Command Issues](#jobstats-command-issues)
 7. [Service and Installation Issues](#service-and-installation-issues)
-8. [Testing and Validation](#testing-and-validation)
-9. [Prevention and Best Practices](#prevention-and-best-practices)
+8. [Visual Features and Dashboard Issues](#visual-features-and-dashboard-issues)
+9. [Testing and Validation](#testing-and-validation)
+10. [Prevention and Best Practices](#prevention-and-best-practices)
 
 ## Common Jobstats Issues
 
@@ -477,7 +478,7 @@ else:
 ```bash
 # Apply jobstats patches
 python3 /path/to/fix_jobstats_timelimit.py
-python3 /path/to/fix_alloc_cores_simple.py
+python3 /path/to/fix_jobstats_alloc_cores.py
 ```
 
 ### Issue: Jobstats Installation Path Problems
@@ -784,6 +785,225 @@ curl -s "http://dgx-01:9306/metrics" | grep "cgroup_cpu_total_seconds"
 
 # Check Prometheus targets
 curl -s "http://statsrv:9090/api/v1/targets" | jq '.data.activeTargets[]'
+```
+
+## Visual Features and Dashboard Issues
+
+### Issue: Grafana Dashboard Shows "No Data"
+
+**Symptoms:**
+- Grafana dashboard panels display "No data" or empty graphs
+- Job ID input returns no results
+- All visualizations appear empty
+
+**Root Causes:**
+1. **Prometheus not collecting data** - Exporters not running or misconfigured
+2. **Job ID doesn't exist in Prometheus** - Job completed before metrics were collected
+3. **Incorrect Prometheus data source** - Grafana pointing to wrong Prometheus instance
+4. **Time range issues** - Dashboard looking at wrong time period
+
+**Solutions:**
+
+#### 1. Check Prometheus Data Collection
+```bash
+# Check if Prometheus is collecting data
+curl -s http://<monitoring server>:9090/api/v1/query?query=up
+
+# Verify job ID exists in Prometheus
+curl -s "http://<monitoring server>:9090/api/v1/query?query=cgroup_cpus{jobid=\"<jobid>\"}"
+
+# Check all available job IDs
+curl -s "http://<monitoring server>:9090/api/v1/query?query=group by (jobid) (cgroup_cpu_total_seconds)" | jq
+```
+
+#### 2. Verify Grafana Data Source
+- Go to Grafana → Configuration → Data Sources
+- Check that Prometheus data source is configured correctly
+- Test the connection using "Test" button
+- Ensure URL points to correct Prometheus server
+
+#### 3. Check Time Range
+- Verify dashboard time range includes the job execution period
+- Use "Last 1 hour" or "Last 6 hours" for recent jobs
+- Check if job completed within the selected time range
+
+### Issue: Grafana Dashboard Import Fails
+
+**Symptoms:**
+- Dashboard import fails with error messages
+- Imported dashboard shows errors or missing panels
+- JSON file upload fails
+
+**Root Causes:**
+1. **Incompatible Grafana version** - Dashboard requires newer Grafana
+2. **Corrupted JSON file** - File damaged during transfer
+3. **Missing data source** - Dashboard references non-existent data source
+4. **Permission issues** - Insufficient access to import dashboards
+
+**Solutions:**
+
+#### 1. Check Grafana Version
+```bash
+# Check Grafana version
+grafana-server --version
+
+# Ensure version is 8.1.2 or compatible
+# Upgrade if necessary
+```
+
+#### 2. Verify JSON File Integrity
+```bash
+# Check file exists and is readable
+ls -la /opt/jobstats-deployment/jobstats/grafana/Single_Job_Stats.json
+
+# Validate JSON syntax
+python3 -m json.tool /opt/jobstats-deployment/jobstats/grafana/Single_Job_Stats.json > /dev/null
+```
+
+#### 3. Check Data Source Configuration
+- Ensure Prometheus data source is configured before importing
+- Verify data source name matches dashboard requirements
+- Test data source connection
+
+### Issue: Additional Tools Can't Connect to Prometheus
+
+**Symptoms:**
+- gpudash shows connection errors
+- Job Defense Shield fails to connect
+- Tools report "Connection refused" or timeout errors
+
+**Root Causes:**
+1. **Prometheus server not running** - Service stopped or crashed
+2. **Network connectivity issues** - Firewall blocking connections
+3. **Wrong server address** - Tools pointing to incorrect Prometheus URL
+4. **Port conflicts** - Another service using port 9090
+
+**Solutions:**
+
+#### 1. Verify Prometheus Server Status
+```bash
+# Check Prometheus service status
+systemctl status prometheus
+
+# Check if Prometheus is listening on port 9090
+netstat -tlnp | grep :9090 || ss -tlnp | grep :9090
+
+# Test local connection
+curl -s http://localhost:9090/api/v1/query?query=up
+```
+
+#### 2. Check Network Connectivity
+```bash
+# Test connection from tool server to Prometheus
+telnet <monitoring server> 9090
+
+# Check if port is open
+nmap -p 9090 <monitoring server>
+
+# Test with curl
+curl -s http://<monitoring server>:9090/api/v1/query?query=up
+```
+
+#### 3. Verify Firewall Rules
+```bash
+# Check firewall status
+ufw status
+
+# Allow Prometheus port if needed
+ufw allow 9090
+
+# Check iptables rules
+iptables -L | grep 9090
+```
+
+### Issue: GPU Dashboard (gpudash) Not Working
+
+**Symptoms:**
+- gpudash shows "No GPUs found" or connection errors
+- Empty output or crashes when running
+- Can't connect to GPU nodes
+
+**Root Causes:**
+1. **Missing Python dependencies** - blessed or requests not installed
+2. **GPU nodes not accessible** - Network or SSH issues
+3. **nvidia-smi not available** - NVIDIA drivers not installed
+4. **Permission issues** - Can't access GPU information
+
+**Solutions:**
+
+#### 1. Install Dependencies
+```bash
+# Install required Python packages
+pip3 install blessed requests
+
+# Verify installation
+python3 -c "import blessed, requests; print('Dependencies OK')"
+```
+
+#### 2. Check GPU Node Access
+```bash
+# Test SSH access to GPU nodes
+ssh <dgx node> "nvidia-smi"
+
+# Check if nvidia-smi is available
+ssh <dgx node> "which nvidia-smi"
+
+# Test GPU information retrieval
+ssh <dgx node> "nvidia-smi --query-gpu=index,name,utilization.gpu --format=csv"
+```
+
+#### 3. Verify GPU Exporter
+```bash
+# Check if nvidia_gpu_exporter is running
+ssh <dgx node> "systemctl status nvidia_gpu_exporter"
+
+# Test metrics endpoint
+curl -s http://<dgx node>:9445/metrics | grep nvidia_gpu
+```
+
+### Issue: Job Defense Shield Not Working
+
+**Symptoms:**
+- Job Defense Shield fails to generate reports
+- Configuration errors or missing files
+- Can't connect to Prometheus or Slurm
+
+**Root Causes:**
+1. **Missing configuration file** - config.json not created or misconfigured
+2. **Wrong Prometheus URL** - Pointing to incorrect server
+3. **Missing dependencies** - Python packages not installed
+4. **Permission issues** - Can't access required files
+
+**Solutions:**
+
+#### 1. Create Configuration File
+```bash
+# Copy example configuration
+cp config.json.example config.json
+
+# Edit configuration with correct settings
+nano config.json
+
+# Verify configuration
+python3 -c "import json; json.load(open('config.json'))"
+```
+
+#### 2. Install Dependencies
+```bash
+# Install required packages
+pip3 install -r requirements.txt
+
+# Verify installation
+python3 -c "import job_defense_shield; print('Dependencies OK')"
+```
+
+#### 3. Test Configuration
+```bash
+# Run dry-run test
+python3 job_defense_shield.py --config config.json --dry-run
+
+# Test Prometheus connection
+python3 -c "import requests; requests.get('http://<monitoring server>:9090/api/v1/query?query=up')"
 ```
 
 This troubleshooting guide should help resolve most common issues encountered during jobstats deployment. Always start with the most likely causes and work through the solutions systematically.

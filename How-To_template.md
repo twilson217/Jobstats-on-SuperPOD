@@ -9,6 +9,7 @@ It can be used as a reference for what was done or as a manual implementation gu
 
 ## Table of Contents
 
+### ----- COPY AND PASTE FROM automation/logs/guided_setup_document.md -----
 1. [Setup Overview](#overview)
 2. [CPU Job Statistics](#cpu-job-stats)
 3. [GPU Job Statistics](#gpu-job-stats)
@@ -19,6 +20,14 @@ It can be used as a reference for what was done or as a manual implementation gu
 8. [Open OnDemand Jobstats Helper](#ood)
 9. [The jobstats Command](#jobstats-command)
 10. [Additional BCM Configurations](#bcm-configurations)
+
+### ----- NOT INCLUDED IN automation/logs/guided_setup_document.md -----
+11. [Testing Visual Features and Grafana Dashboards](#testing-visual-features-and-grafana-dashboards)
+    - [Prerequisites for Visual Testing](#prerequisites-for-visual-testing)
+    - [Grafana Dashboard Testing](#grafana-dashboard-testing)
+    - [Additional Monitoring Tools](#additional-monitoring-tools)
+    - [Verification Checklist](#verification-checklist)
+    - [Advanced Usage](#advanced-usage)
 
 ---
 
@@ -1185,54 +1194,9 @@ The dashboard provides comprehensive visualizations across several categories:
 - **GPFS Bandwidth**: File system read/write operations
 - **Infiniband Metrics**: Throughput, packet rates, and error monitoring
 
-### 2. Open OnDemand Integration Testing
+### 2. Additional Monitoring Tools
 
-#### 2.1 Deploy the OOD Helper App
-
-The OOD helper provides a web interface for easy access to job statistics.
-
-**Step 1: Install the OOD Helper**
-```bash
-# On <monitoring server> or OOD server
-# Copy the OOD helper to the OOD apps directory
-cp -r /opt/jobstats-deployment/jobstats/ood-jobstats-helper /var/www/ood/apps/sys/jobstats
-
-# Set proper permissions
-chown -R apache:apache /var/www/ood/apps/sys/jobstats
-chmod -R 755 /var/www/ood/apps/sys/jobstats
-```
-
-**Step 2: Configure OOD Integration**
-```bash
-# Edit the OOD configuration to point to your Grafana instance
-# This typically involves updating the OOD configuration files
-# to include the Grafana URL and dashboard settings
-```
-
-#### 2.2 Test OOD Integration
-
-**Step 1: Access the OOD Interface**
-```bash
-# Open OOD in your web browser
-# URL: http://<ood server>/pun/sys/jobstats
-```
-
-**Step 2: Test Job Lookup**
-1. Enter a job ID in the web form
-2. Select your cluster from the dropdown
-3. Click submit
-4. Verify that it redirects to the correct Grafana dashboard with the job data
-
-**Step 3: Test Direct URL Access**
-```bash
-# Test direct URL access (if configured)
-# URL: http://<ood server>/pun/sys/jobstats/<cluster>/<jobid>
-# Example: http://<ood server>/pun/sys/jobstats/slurm/12345
-```
-
-### 3. Additional Monitoring Tools
-
-#### 3.1 GPU Dashboard (gpudash)
+#### 2.1 GPU Dashboard (gpudash)
 
 The `gpudash` tool provides a text-based real-time view of GPU utilization across the cluster.
 
@@ -1262,7 +1226,7 @@ python3 gpudash.py --columns 5 --interval 5
 python3 gpudash.py --available
 ```
 
-#### 3.2 Job Defense Shield
+#### 2.2 Job Defense Shield
 
 Job Defense Shield provides automated monitoring and alerting for underutilized jobs.
 
@@ -1290,7 +1254,7 @@ python3 job_defense_shield.py --config config.json --dry-run
 python3 job_defense_shield.py --config config.json --report
 ```
 
-### 4. Verification Checklist
+### 3. Verification Checklist
 
 Use this checklist to verify all visual features are working correctly:
 
@@ -1304,48 +1268,13 @@ Use this checklist to verify all visual features are working correctly:
 - [ ] Time range selector works correctly
 - [ ] All panels load without "No data" errors
 
-#### Open OnDemand Integration
-- [ ] OOD helper app loads in web browser
-- [ ] Job ID lookup returns correct results
-- [ ] Direct URL access works
-- [ ] Grafana dashboard opens with correct job data
-- [ ] Cluster selection works properly
-
 #### Additional Tools
 - [ ] gpudash displays current GPU status
 - [ ] Job Defense Shield generates reports
 - [ ] All tools can connect to Prometheus
 - [ ] Error handling works for invalid inputs
 
-### 5. Troubleshooting Visual Features
-
-#### Common Issues and Solutions
-
-**Dashboard Shows "No Data":**
-```bash
-# Check if Prometheus is collecting data
-curl -s http://<monitoring server>:9090/api/v1/query?query=up
-
-# Verify job ID exists in Prometheus
-curl -s "http://<monitoring server>:9090/api/v1/query?query=cgroup_cpus{jobid=\"<jobid>\"}"
-```
-
-**Grafana Dashboard Import Fails:**
-- Ensure Grafana version is 8.1.2 or compatible
-- Check that Prometheus data source is properly configured
-- Verify JSON file is not corrupted
-
-**OOD Helper Not Working:**
-- Check OOD server logs: `/var/log/ood/passenger.log`
-- Verify file permissions on the app directory
-- Ensure OOD is configured to allow the jobstats app
-
-**Tools Can't Connect to Prometheus:**
-- Verify Prometheus server is running: `systemctl status prometheus`
-- Check network connectivity: `telnet <monitoring server> 9090`
-- Verify firewall rules allow connections
-
-### 6. Advanced Usage
+### 4. Advanced Usage
 
 #### Custom Dashboard Creation
 - Create additional Grafana dashboards for specific use cases
