@@ -114,8 +114,8 @@ class GuidedJobstatsSetup:
             },
             {
                 'id': 'ood',
-                'title': 'Open OnDemand Jobstats Helper',
-                'description': 'Setup Open OnDemand integration (optional)',
+                'title': 'Open OnDemand Integration (Not Covered)',
+                'description': 'Open OnDemand integration is not included in this setup',
                 'completed': False
             },
             {
@@ -1607,64 +1607,51 @@ scrape_configs:
         return True
 
     def section_ood(self):
-        """Section 8: Open OnDemand Jobstats Helper"""
+        """Section 8: Open OnDemand Integration (Not Covered)"""
         self._print_header(
-            "8. Open OnDemand Jobstats Helper",
-            "Setup Open OnDemand integration (optional)"
+            "8. Open OnDemand Integration (Not Covered)",
+            "Open OnDemand integration is not included in this setup"
         )
         
         # Add to document
-        self._add_to_document("## 8. Open OnDemand Jobstats Helper")
+        self._add_to_document("## 8. Open OnDemand Integration (Not Covered)")
         self._add_to_document("")
         self._add_to_document("### Description")
         self._add_to_document("")
-        self._add_to_document("This section sets up Open OnDemand integration")
-        self._add_to_document("for easy access to job statistics.")
+        self._add_to_document("Open OnDemand (OOD) integration is not included in this guided setup.")
+        self._add_to_document("OOD is a separate web portal application that requires its own installation")
+        self._add_to_document("and configuration process.")
         self._add_to_document("")
-        self._add_to_document("### What we'll do")
+        self._add_to_document("### Why OOD is not included")
         self._add_to_document("")
-        self._add_to_document("- Clone jobstats OOD helper files")
-        self._add_to_document("- Configure OOD integration")
-        self._add_to_document("- Test OOD jobstats functionality")
+        self._add_to_document("- OOD is a full HPC web portal that requires separate installation")
+        self._add_to_document("- OOD installation is beyond the scope of this jobstats setup")
+        self._add_to_document("- The jobstats OOD helper files are available but require OOD to be installed first")
+        self._add_to_document("")
+        self._add_to_document("### OOD Helper Files Location")
+        self._add_to_document("")
+        self._add_to_document("If you have OOD installed and want to integrate jobstats:")
+        self._add_to_document("- OOD helper files are available in the jobstats repository")
+        self._add_to_document("- Path: `jobstats/ood-jobstats-helper/`")
+        self._add_to_document("- Follow the README in that directory for integration instructions")
         self._add_to_document("")
         
-        print(f"{Colors.BLUE}This section sets up the Open OnDemand integration{Colors.END}")
-        print(f"{Colors.BLUE}for easy access to jobstats dashboards.{Colors.END}")
+        print(f"{Colors.BLUE}Open OnDemand integration is not included in this setup.{Colors.END}")
+        print(f"{Colors.BLUE}OOD is a separate web portal application.{Colors.END}")
         
-        print(f"\n{Colors.BOLD}{Colors.WHITE}What we'll do:{Colors.END}")
-        print(f"• Clone OOD helper application")
-        print(f"• Configure OOD integration")
-        print(f"• Test dashboard access")
+        print(f"\n{Colors.BOLD}{Colors.WHITE}Why OOD is not included:{Colors.END}")
+        print(f"• OOD is a full HPC web portal requiring separate installation")
+        print(f"• OOD installation is beyond the scope of this jobstats setup")
+        print(f"• The jobstats OOD helper files are available but require OOD first")
         
-        # Commands for OOD setup
-        ood_commands = [
-            {
-                'host': 'localhost',
-                'command': f'mkdir -p {self.working_dir}',
-                'description': 'Create working directory for OOD helper'
-            },
-            {
-                'host': 'localhost',
-                'command': f'cd {self.working_dir} && git clone https://github.com/PrincetonUniversity/jobstats.git',
-                'description': 'Clone jobstats repository for OOD helper'
-            },
-            {
-                'host': 'localhost',
-                'command': f'ls -la {self.working_dir}/jobstats/ood-jobstats-helper/',
-                'description': 'List OOD helper files'
-            }
-        ]
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}OOD Helper Files:{Colors.END}")
+        print(f"If you have OOD installed and want to integrate jobstats:")
+        print(f"• OOD helper files are available in the jobstats repository")
+        print(f"• Path: {Colors.WHITE}jobstats/ood-jobstats-helper/{Colors.END}")
+        print(f"• Follow the README in that directory for integration instructions")
         
-        if self._execute_commands(ood_commands):
-            print(f"\n{Colors.GREEN}✓ OOD helper setup completed{Colors.END}")
-        else:
-            print(f"\n{Colors.RED}✗ OOD helper setup failed{Colors.END}")
-            return False
-        
-        print(f"\n{Colors.BOLD}{Colors.YELLOW}OOD Integration:{Colors.END}")
-        print(f"The OOD helper files are available in:")
-        print(f"• {Colors.WHITE}{self.working_dir}/jobstats/ood-jobstats-helper/{Colors.END}")
-        print(f"• Follow the README in that directory for OOD integration")
+        # Mark as completed since we're explaining why it's not included
+        return True
         
         if not self.dry_run:
             self._safe_continue()
