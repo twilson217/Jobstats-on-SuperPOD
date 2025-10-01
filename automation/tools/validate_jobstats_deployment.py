@@ -482,6 +482,349 @@ class JobstatsValidator:
                 "Service configured (should be disabled)" if success else "Service not configured"
             )
     
+    def validate_data_quality(self):
+        """Validate data quality and check for known issues."""
+        print(f"\n{Colors.BOLD}9. Checking Data Quality{Colors.END}")
+        print("=" * 50)
+        
+        # Test for alloc/cores division error
+        self._test_alloc_cores_issue()
+        
+        # Test for timelimit issues
+        self._test_timelimit_issues()
+        
+        # Test job data completeness
+        self._test_job_data_completeness()
+        
+        # Test metric label consistency
+        self._test_metric_label_consistency()
+    
+    def _test_alloc_cores_issue(self):
+        """Test for the alloc/cores division error that fix_jobstats_alloc_cores.py addresses."""
+        print(f"\n{Colors.BLUE}Testing for alloc/cores division error...{Colors.END}")
+        
+        # Check if there are any recent jobs with the alloc/cores issue
+        slurm_controller = self.config['systems']['slurm_controller'][0]
+        
+        # Look for jobs in the last 24 hours
+        success, stdout, stderr = self._run_command(
+            "sacct -S $(date -d '1 day ago' '+%Y-%m-%d') --format=JobID,AllocCPUS,ReqCPUS,State --noheader | head -10",
+            slurm_controller
+        )
+        
+        if not success:
+            self._test_result(
+                "Alloc/cores data availability",
+                False,
+                "Cannot retrieve job allocation data from Slurm"
+            )
+            return
+        
+        # Check for potential alloc/cores mismatches
+        alloc_cores_issues = 0
+        total_jobs = 0
+        
+        for line in stdout.strip().split('\n'):
+            if not line.strip():
+                continue
+                
+            parts = line.split()
+            if len(parts) >= 4:
+                job_id, alloc_cpus, req_cpus, state = parts[0], parts[1], parts[2], parts[3]
+                total_jobs += 1
+                
+                # Check for potential division issues (alloc_cpus != req_cpus when both are numbers)
+                try:
+                    alloc_num = int(alloc_cpus)
+                    req_num = int(req_cpus)
+                    if alloc_num != req_num and state in ['COMPLETED', 'FAILED', 'CANCELLED']:
+                        alloc_cores_issues += 1
+                except ValueError:
+                    continue
+        
+        if total_jobs > 0:
+            issue_percentage = (alloc_cores_issues / total_jobs) * 100
+            self._test_result(
+                "Alloc/cores consistency",
+                issue_percentage < 50,  # Allow some variance but flag if >50% have issues
+                f"Found {alloc_cores_issues}/{total_jobs} jobs with potential alloc/cores mismatch ({issue_percentage:.1f}%)"
+            )
+        else:
+            self._test_result(
+                "Alloc/cores data availability",
+                True,
+                "No recent job data found to analyze"
+            )
+    
+    def _test_timelimit_issues(self):
+        """Test for timelimit issues that fix_jobstats_timelimit.py addresses."""
+        print(f"\n{Colors.BLUE}Testing for timelimit issues...{Colors.END}")
+        
+        slurm_controller = self.config['systems']['slurm_controller'][0]
+        
+        # Check for jobs with unusual timelimit patterns
+        success, stdout, stderr = self._run_command(
+            "sacct -S $(date -d '1 day ago' '+%Y-%m-%d') --format=JobID,TimeLimit,Elapsed,State --noheader | head -10",
+            slurm_controller
+        )
+        
+        if not success:
+            self._test_result(
+                "Timelimit data availability",
+                False,
+                "Cannot retrieve job timelimit data from Slurm"
+            )
+            return
+        
+        # Check for potential timelimit issues
+        timelimit_issues = 0
+        total_jobs = 0
+        
+        for line in stdout.strip().split('\n'):
+            if not line.strip():
+                continue
+                
+            parts = line.split()
+            if len(parts) >= 4:
+                job_id, time_limit, elapsed, state = parts[0], parts[1], parts[2], parts[3]
+                total_jobs += 1
+                
+                # Check for jobs that failed due to time limit
+                if state == 'TIMEOUT' or 'TIME' in state:
+                    timelimit_issues += 1
+        
+        if total_jobs > 0:
+            issue_percentage = (timelimit_issues / total_jobs) * 100
+            self._test_result(
+                "Timelimit consistency",
+                issue_percentage < 20,  # Flag if >20% of jobs timeout
+                f"Found {timelimit_issues}/{total_jobs} jobs with timelimit issues ({issue_percentage:.1f}%)"
+            )
+        else:
+            self._test_result(
+                "Timelimit data availability",
+                True,
+                "No recent job data found to analyze"
+            )
+    
+    def _test_job_data_completeness(self):
+        """Test that job data contains all required fields."""
+        print(f"\n{Colors.BLUE}Testing job data completeness...{Colors.END}")
+        
+        # Test jobstats command with a recent job
+        login_nodes = self.config['systems'].get('login_nodes', [])
+        if not login_nodes:
+            self._test_result(
+                "Job data completeness",
+                False,
+                "No login nodes configured for testing"
+            )
+            return
+        
+        login_host = login_nodes[0]
+        
+        # Get a recent completed job
+        success, stdout, stderr = self._run_command(
+            "sacct -S $(date -d '1 day ago' '+%Y-%m-%d') --format=JobID,State --noheader | grep -E '(COMPLETED|FAILED|CANCELLED)' | head -1",
+            login_host
+        )
+        
+        if not success or not stdout.strip():
+            self._test_result(
+                "Job data completeness",
+                True,
+                "No recent completed jobs found to test"
+            )
+            return
+        
+        job_id = stdout.strip().split()[0]
+        
+        # Test jobstats command on this job
+        success, stdout, stderr = self._run_command(
+            f"jobstats {job_id}",
+            login_host
+        )
+        
+        if success and "No data was found" not in stdout:
+            # Check for key data fields in the output
+            required_fields = ['Job ID', 'User', 'Account', 'State', 'Exit Code']
+            missing_fields = []
+            
+            for field in required_fields:
+                if field not in stdout:
+                    missing_fields.append(field)
+            
+            self._test_result(
+                "Job data completeness",
+                len(missing_fields) == 0,
+                f"Missing fields: {', '.join(missing_fields)}" if missing_fields else "All required fields present"
+            )
+        else:
+            self._test_result(
+                "Job data completeness",
+                False,
+                f"Jobstats command failed or returned no data for job {job_id}"
+            )
+    
+    def _test_metric_label_consistency(self):
+        """Test that Prometheus metrics have consistent labels."""
+        print(f"\n{Colors.BLUE}Testing metric label consistency...{Colors.END}")
+        
+        prometheus_host = self.config['systems']['prometheus_server'][0]
+        prometheus_port = self.config['prometheus_port']
+        
+        # Check node_exporter labels
+        success, stdout, stderr = self._run_command(
+            f"curl -s 'http://localhost:{self.config['prometheus_port']}/api/v1/query?query=node_uname_info' | jq '.data.result[0].metric' 2>/dev/null || echo 'no_data'",
+            prometheus_host
+        )
+        
+        if success and stdout.strip() and stdout.strip() != 'no_data':
+            # Parse the JSON metric object
+            try:
+                import json
+                metric = json.loads(stdout)
+                if metric is None:
+                    self._test_result(
+                        "Node exporter labels",
+                        False,
+                        "No node_exporter metrics found - check if node_exporter is running and accessible"
+                    )
+                else:
+                    required_labels = ['instance', 'job', 'nodename']
+                    missing_labels = []
+                    
+                    for label in required_labels:
+                        if label not in metric:
+                            missing_labels.append(label)
+                    
+                    self._test_result(
+                        "Node exporter labels",
+                        len(missing_labels) == 0,
+                        f"Missing labels: {', '.join(missing_labels)}" if missing_labels else "All required labels present"
+                    )
+            except json.JSONDecodeError:
+                self._test_result(
+                    "Node exporter labels",
+                    False,
+                    "Failed to parse metric labels JSON"
+                )
+        else:
+            self._test_result(
+                "Node exporter labels",
+                False,
+                "No node_exporter metrics found - check if node_exporter is running and accessible"
+            )
+        
+        # Check cgroup metrics labels
+        success, stdout, stderr = self._run_command(
+            f"curl -s 'http://localhost:{prometheus_port}/api/v1/query?query=cgroup_cpu_total_seconds' | jq '.data.result[0].metric' 2>/dev/null || echo 'no_data'",
+            prometheus_host
+        )
+        
+        if success and stdout.strip() and stdout.strip() != 'no_data':
+            # Parse the JSON metric object
+            try:
+                import json
+                metric = json.loads(stdout)
+                if metric is None:
+                    self._test_result(
+                        "Cgroup metric labels",
+                        False,
+                        "No cgroup metrics found - check cgroup_exporter configuration",
+                        warning=True
+                    )
+                    self._check_cgroup_exporter_config()
+                else:
+                    # Check for required labels (based on actual cgroup_exporter output)
+                    required_labels = ['jobid', 'cluster', 'instance', 'job']
+                    missing_labels = []
+                    
+                    for label in required_labels:
+                        if label not in metric:
+                            missing_labels.append(label)
+                    
+                    self._test_result(
+                        "Cgroup metric labels",
+                        len(missing_labels) == 0,
+                        f"Missing labels: {', '.join(missing_labels)}" if missing_labels else "All required labels present"
+                    )
+            except json.JSONDecodeError:
+                self._test_result(
+                    "Cgroup metric labels",
+                    False,
+                    "Failed to parse metric labels JSON"
+                )
+        else:
+            self._test_result(
+                "Cgroup metric labels",
+                False,
+                "No cgroup metrics found - check cgroup_exporter configuration",
+                warning=True
+            )
+            self._check_cgroup_exporter_config()
+    
+    def _check_cgroup_exporter_config(self):
+        """Check cgroup_exporter configuration and provide diagnostic information."""
+        print(f"\n{Colors.YELLOW}🔍 Cgroup Exporter Configuration Check{Colors.END}")
+        
+        # Check cgroup_exporter configuration
+        dgx_nodes = self.config['systems'].get('dgx_nodes', [])
+        if dgx_nodes:
+            dgx_host = dgx_nodes[0]
+            
+            # Get cgroup_exporter configuration
+            success, stdout, stderr = self._run_command(
+                "systemctl cat cgroup_exporter | grep ExecStart",
+                dgx_host
+            )
+            
+            if success:
+                print(f"{Colors.BLUE}Current cgroup_exporter config: {stdout.strip()}{Colors.END}")
+                
+                # Check what cgroup paths exist
+                success, stdout, stderr = self._run_command(
+                    "find /sys/fs/cgroup/ -name '*slurm*' -type d 2>/dev/null | head -5",
+                    dgx_host
+                )
+                
+                if success and stdout.strip():
+                    print(f"{Colors.BLUE}Available cgroup paths:{Colors.END}")
+                    for path in stdout.strip().split('\n'):
+                        print(f"  {path}")
+                
+                # Check if there are job-specific cgroup directories
+                success, stdout, stderr = self._run_command(
+                    "find /sys/fs/cgroup/ -path '*/slurm/*' -name '*job*' -o -name '*uid*' 2>/dev/null | head -5",
+                    dgx_host
+                )
+                
+                if success and stdout.strip():
+                    print(f"{Colors.GREEN}Found job-specific cgroup directories:{Colors.END}")
+                    for path in stdout.strip().split('\n'):
+                        print(f"  {path}")
+                else:
+                    print(f"{Colors.YELLOW}No job-specific cgroup directories found{Colors.END}")
+                    print(f"{Colors.YELLOW}This suggests either:{Colors.END}")
+                    print(f"{Colors.YELLOW}  1. No jobs are currently running{Colors.END}")
+                    print(f"{Colors.YELLOW}  2. cgroup_exporter is monitoring wrong paths{Colors.END}")
+                    print(f"{Colors.YELLOW}  3. Slurm cgroup configuration issue{Colors.END}")
+            else:
+                print(f"{Colors.RED}Could not retrieve cgroup_exporter configuration{Colors.END}")
+    
+    def _suggest_test_job(self):
+        """Suggest running a test job to generate metrics for validation."""
+        if not hasattr(self, '_test_job_suggested'):
+            self._test_job_suggested = True
+            print(f"\n{Colors.YELLOW}💡 SUGGESTION: No recent job data found for metric validation{Colors.END}")
+            print(f"{Colors.BLUE}To generate test data and validate metrics, run this test job:{Colors.END}")
+            print(f"{Colors.BOLD}    srun --time=2:00 --cpus-per-task=2 --mem=1G --job-name=jobstats-test \\")
+            print(f"        bash -c 'echo \"Testing jobstats deployment...\"; sleep 60; echo \"Test job completed\"'{Colors.END}")
+            print(f"\n{Colors.BLUE}After the job completes, wait 2-3 minutes for metrics to be scraped, then run:{Colors.END}")
+            print(f"{Colors.BOLD}    python3 automation/tools/validate_jobstats_deployment.py{Colors.END}")
+            print(f"\n{Colors.YELLOW}Note: Cgroup metrics are only available while jobs are running or briefly after completion.{Colors.END}")
+            print(f"{Colors.YELLOW}If validation still fails, the cgroup_exporter may need configuration adjustment.{Colors.END}")
+    
     def generate_report(self):
         """Generate a summary report."""
         print(f"\n{Colors.BOLD}Validation Summary{Colors.END}")
@@ -519,6 +862,7 @@ class JobstatsValidator:
             self.validate_slurm_configuration()
             self.validate_jobstats_command()
             self.validate_bcm_requirements()
+            self.validate_data_quality()
             
             return self.generate_report()
             

@@ -30,15 +30,19 @@ python3 validate_jobstats_deployment.py
 # Run with specific config file
 python3 validate_jobstats_deployment.py --config /path/to/config.json
 
-# Run specific test sections
-python3 validate_jobstats_deployment.py --sections "1,2,3"
+# Run with verbose output
+python3 validate_jobstats_deployment.py --verbose
 ```
 
+**Note**: If the validation reports "No cgroup metrics found", the script will suggest running a test job to generate data for proper validation.
+
 **Features**:
-- 35 comprehensive validation tests
+- 35+ comprehensive validation tests
 - Tests all exporters (node, cgroup, GPU)
 - Validates Prometheus and Grafana
 - Checks BCM configuration
+- **Data quality validation** - Tests for alloc/cores and timelimit issues
+- **Smart suggestions** - Provides test job commands when no data is available
 - Provides detailed pass/fail reporting
 
 ## Deployment Fixes/Patches
