@@ -10,9 +10,11 @@ Usage:
     python3 fix_jobstats_timelimit.py
 
 The script will:
-- Backup the original file
+- Backup the original file at /cm/shared/apps/jobstats/output_formatters.py
 - Apply fixes to handle UNLIMITED time limits
 - Restore from backup if something goes wrong
+
+Note: This script now works with the shared storage jobstats installation.
 """
 
 import os
@@ -23,8 +25,8 @@ import sys
 def fix_timelimit_parsing():
     """Fix the timelimit parsing issues in jobstats output_formatters.py"""
     
-    file_path = "/usr/local/jobstats/output_formatters.py"
-    backup_path = "/usr/local/jobstats/output_formatters.py.backup.timelimit_fix"
+    file_path = "/cm/shared/apps/jobstats/output_formatters.py"
+    backup_path = "/cm/shared/apps/jobstats/output_formatters.py.backup.timelimit_fix"
     
     # Check if file exists
     if not os.path.exists(file_path):

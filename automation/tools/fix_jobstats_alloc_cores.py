@@ -4,6 +4,9 @@ Fix for jobstats alloc/cores division error
 
 This script fixes the TypeError in output_formatters.py where alloc is a string
 but cores is an integer, causing a division error.
+
+Note: This script now works with the shared storage jobstats installation
+at /cm/shared/apps/jobstats/output_formatters.py.
 """
 
 import os
@@ -14,8 +17,8 @@ from datetime import datetime
 def fix_jobstats_alloc_cores():
     """Fix the alloc/cores division error in jobstats"""
     
-    jobstats_file = "/usr/local/jobstats/output_formatters.py"
-    backup_file = f"/usr/local/jobstats/output_formatters.py.backup.alloc_cores.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    jobstats_file = "/cm/shared/apps/jobstats/output_formatters.py"
+    backup_file = f"/cm/shared/apps/jobstats/output_formatters.py.backup.alloc_cores.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     
     if not os.path.exists(jobstats_file):
         print(f"Error: {jobstats_file} not found")
