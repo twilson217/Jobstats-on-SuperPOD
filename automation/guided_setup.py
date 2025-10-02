@@ -183,8 +183,9 @@ class GuidedJobstatsSetup:
             json.dump(self.progress, f, indent=2)
 
     def _add_to_document(self, content: str):
-        """Add content to the document."""
-        self.document_content.append(content)
+        """Add content to the document (only in dry-run mode)."""
+        if self.dry_run:
+            self.document_content.append(content)
 
     def _save_document(self):
         """Save the complete document to file."""
@@ -592,8 +593,8 @@ python3 /tmp/update_slurm_conf.py''',
             },
             {
                 'host': None,  # Run locally on BCM headnode
-                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "wlm;use {cluster_name};set selecttypeparameters CR_CPU_Memory;commit"',
-                'description': f'cmsh -c "wlm;use {cluster_name};set selecttypeparameters CR_CPU_Memory;commit"'
+                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "wlm;use {cluster_name};set selecttypeparameters CR_Core_Memory;commit"',
+                'description': f'cmsh -c "wlm;use {cluster_name};set selecttypeparameters CR_Core_Memory;commit"'
             }
         ]
         
@@ -1438,15 +1439,13 @@ scrape_configs:
             print(f"{Colors.GREEN}✓ Prometheus configuration created{Colors.END}")
             return True
         
-        # Write config file
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
-            f.write(prometheus_config)
-            temp_file = f.name
-        
+        # Create config file directly on remote server
         config_commands = [
             {
                 'host': self.config['prometheus_server'],
-                'command': f'cp {temp_file} /etc/prometheus/prometheus.yml',
+                'command': f'''cat > /etc/prometheus/prometheus.yml << 'EOF'
+{prometheus_config}
+EOF''',
                 'description': 'Install Prometheus configuration'
             },
             {
@@ -1458,11 +1457,9 @@ scrape_configs:
         
         if self._execute_commands(config_commands):
             print(f"{Colors.GREEN}✓ Prometheus configuration created{Colors.END}")
-            os.unlink(temp_file)
             return True
         else:
             print(f"{Colors.RED}✗ Prometheus configuration failed{Colors.END}")
-            os.unlink(temp_file)
             return False
 
     def section_grafana(self):
@@ -1493,6 +1490,7 @@ scrape_configs:
         
         print(f"{Colors.BLUE}This section sets up Grafana for visualizing{Colors.END}")
         print(f"{Colors.BLUE}the collected metrics and creating dashboards.{Colors.END}")
+        print(f"{Colors.YELLOW}Note: Package repository updates may take several minutes.{Colors.END}")
         
         print(f"\n{Colors.BOLD}{Colors.WHITE}What we'll do:{Colors.END}")
         print(f"• Install Grafana")
@@ -1522,7 +1520,7 @@ scrape_configs:
             },
             {
                 'host': self.config['grafana_server'],
-                'command': 'apt install -y grafana',
+                'command': 'DEBIAN_FRONTEND=noninteractive apt install -y grafana',
                 'description': 'Install Grafana'
             }
         ]
@@ -1683,9 +1681,13 @@ scrape_configs:
         self._add_to_document("### What we'll do")
         self._add_to_document("")
         self._add_to_document("- Install Python dependencies (requests, blessed)")
-        self._add_to_document("- Install jobstats binary and Python files")
+        self._add_to_document("- Install jobstats files to shared storage (`/cm/shared/apps/jobstats/`)")
+        self._add_to_document("- Create symlinks on all login nodes")
         self._add_to_document("- Configure jobstats for your cluster")
         self._add_to_document("- Test jobstats command functionality")
+        self._add_to_document("")
+        self._add_to_document("**Note:** Using shared storage ensures all nodes use the same jobstats files,")
+        self._add_to_document("making maintenance and updates much easier.")
         self._add_to_document("")
         
         print(f"{Colors.BLUE}This section installs the jobstats command-line tool{Colors.END}")
@@ -1697,62 +1699,65 @@ scrape_configs:
         print(f"• Configure jobstats settings")
         print(f"• Test jobstats functionality")
         
-        # Commands for login nodes - use git clone approach
+        # Install jobstats using shared storage approach
         jobstats_commands = []
         
+        # Step 1: Install jobstats files to shared storage (run locally on BCM headnode)
+        jobstats_commands.extend([
+            {
+                'host': None,  # Run locally on BCM headnode
+                'command': 'mkdir -p /cm/shared/apps/jobstats',
+                'description': 'Create shared jobstats directory'
+            },
+            {
+                'host': None,  # Run locally on BCM headnode
+                'command': 'rm -rf /tmp/jobstats-deployment',
+                'description': 'Clean up any existing jobstats repo'
+            },
+            {
+                'host': None,  # Run locally on BCM headnode
+                'command': 'git clone https://github.com/PrincetonUniversity/jobstats.git /tmp/jobstats-deployment',
+                'description': 'Clone jobstats repo'
+            },
+            {
+                'host': None,  # Run locally on BCM headnode
+                'command': 'cp /tmp/jobstats-deployment/jobstats /cm/shared/apps/jobstats/',
+                'description': 'Install jobstats binary to shared storage'
+            },
+            {
+                'host': None,  # Run locally on BCM headnode
+                'command': 'cp /tmp/jobstats-deployment/jobstats.py /cm/shared/apps/jobstats/',
+                'description': 'Install jobstats.py to shared storage'
+            },
+            {
+                'host': None,  # Run locally on BCM headnode
+                'command': 'cp /tmp/jobstats-deployment/output_formatters.py /cm/shared/apps/jobstats/',
+                'description': 'Install output_formatters.py to shared storage'
+            },
+            {
+                'host': None,  # Run locally on BCM headnode
+                'command': 'cp /tmp/jobstats-deployment/config.py /cm/shared/apps/jobstats/',
+                'description': 'Install config.py to shared storage'
+            },
+            {
+                'host': None,  # Run locally on BCM headnode
+                'command': 'chmod +x /cm/shared/apps/jobstats/jobstats',
+                'description': 'Make jobstats executable'
+            },
+            {
+                'host': None,  # Run locally on BCM headnode
+                'command': 'rm -rf /tmp/jobstats-deployment',
+                'description': 'Clean up jobstats repo'
+            }
+        ])
+        
+        # Step 2: Create symlinks on all login nodes
         for login_node in self.config['systems']['login_nodes']:
-            jobstats_commands.extend([
-                {
-                    'host': login_node,
-                    'command': 'mkdir -p /usr/local/jobstats',
-                    'description': f'Create /usr/local/jobstats directory on {login_node}'
-                },
-                {
-                    'host': login_node,
-                    'command': 'rm -rf /tmp/jobstats-deployment',
-                    'description': f'Clean up any existing jobstats repo on {login_node}'
-                },
-                {
-                    'host': login_node,
-                    'command': 'git clone https://github.com/PrincetonUniversity/jobstats.git /tmp/jobstats-deployment',
-                    'description': f'Clone jobstats repo on {login_node}'
-                },
-                {
-                    'host': login_node,
-                    'command': 'cp /tmp/jobstats-deployment/jobstats /usr/local/jobstats/',
-                    'description': f'Install jobstats binary on {login_node}'
-                },
-                {
-                    'host': login_node,
-                    'command': 'cp /tmp/jobstats-deployment/jobstats.py /usr/local/jobstats/',
-                    'description': f'Install jobstats.py on {login_node}'
-                },
-                {
-                    'host': login_node,
-                    'command': 'cp /tmp/jobstats-deployment/output_formatters.py /usr/local/jobstats/',
-                    'description': f'Install output_formatters.py on {login_node}'
-                },
-                {
-                    'host': login_node,
-                    'command': 'cp /tmp/jobstats-deployment/config.py /usr/local/jobstats/',
-                    'description': f'Install config.py on {login_node}'
-                },
-                {
-                    'host': login_node,
-                    'command': 'chmod +x /usr/local/jobstats/jobstats',
-                    'description': f'Make jobstats executable on {login_node}'
-                },
-                {
-                    'host': login_node,
-                    'command': 'ln -sf /usr/local/jobstats/jobstats /usr/local/bin/jobstats',
-                    'description': f'Create symlink for jobstats command on {login_node}'
-                },
-                {
-                    'host': login_node,
-                    'command': 'rm -rf /tmp/jobstats-deployment',
-                    'description': f'Clean up jobstats repo on {login_node}'
-                }
-            ])
+            jobstats_commands.append({
+                'host': login_node,
+                'command': 'ln -sf /cm/shared/apps/jobstats/jobstats /usr/local/bin/jobstats',
+                'description': f'Create jobstats symlink on {login_node}'
+            })
         
         if self._execute_commands(jobstats_commands):
             print(f"\n{Colors.GREEN}✓ Jobstats command installation completed{Colors.END}")
@@ -1762,6 +1767,8 @@ scrape_configs:
         
         # Install Python dependencies for jobstats
         print(f"\n{Colors.BOLD}{Colors.WHITE}Installing Python dependencies for jobstats...{Colors.END}")
+        print(f"{Colors.YELLOW}Note: Package updates can take several minutes, especially on first run.{Colors.END}")
+        print(f"{Colors.YELLOW}Please be patient if the process appears to hang during 'apt update' steps.{Colors.END}")
         
         python_deps_commands = []
         for login_node in self.config['systems']['login_nodes']:
@@ -1773,7 +1780,7 @@ scrape_configs:
                 },
                 {
                     'host': login_node,
-                    'command': 'apt install -y python3-requests python3-blessed',
+                    'command': 'DEBIAN_FRONTEND=noninteractive apt install -y python3-requests python3-blessed',
                     'description': f'Install Python dependencies (requests, blessed) on {login_node}'
                 }
             ])
@@ -2111,8 +2118,9 @@ scrape_configs:
             print(f"{Colors.BOLD}{Colors.YELLOW}[DRY RUN MODE]{Colors.END}")
         print(f"{Colors.BOLD}{Colors.PURPLE}{'='*80}{Colors.END}")
         
-        # Initialize document
-        self._init_document()
+        # Initialize document (only in dry-run mode)
+        if self.dry_run:
+            self._init_document()
         
         if self.resume and self.progress['current_section'] > 0:
             print(f"\n{Colors.YELLOW}Resuming from section {self.progress['current_section'] + 1}{Colors.END}")
@@ -2145,8 +2153,9 @@ scrape_configs:
                 print(f"{Colors.RED}Section {section_id} not implemented{Colors.END}")
                 return False
         
-        # Save final document
-        self._save_document()
+        # Save final document (only in dry-run mode)
+        if self.dry_run:
+            self._save_document()
         
         # Final summary
         print(f"\n{Colors.BOLD}{Colors.GREEN}{'='*80}{Colors.END}")
