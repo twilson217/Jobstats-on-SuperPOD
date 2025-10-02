@@ -237,7 +237,7 @@ class JobstatsValidator:
         
         # Define services by host type
         service_checks = {
-            'dgx_nodes': ['cgroup_exporter', 'node_exporter', 'nvidia_gpu_exporter'],
+            'dgx_nodes': ['cgroup_exporter', 'node_exporter', 'nvidia_gpu_prometheus_exporter'],
             'prometheus_server': ['prometheus'],
             'grafana_server': ['grafana-server']
         }
@@ -262,7 +262,7 @@ class JobstatsValidator:
             'dgx_nodes': [
                 (self.config['node_exporter_port'], 'node_exporter'),
                 (self.config['cgroup_exporter_port'], 'cgroup_exporter'),
-                (self.config['nvidia_gpu_exporter_port'], 'nvidia_gpu_exporter')
+                (self.config['nvidia_gpu_exporter_port'], 'nvidia_gpu_prometheus_exporter')
             ],
             'prometheus_server': [(self.config['prometheus_port'], 'prometheus')],
             'grafana_server': [(self.config['grafana_port'], 'grafana')]
@@ -288,7 +288,7 @@ class JobstatsValidator:
             'dgx_nodes': [
                 (f"http://localhost:{self.config['node_exporter_port']}/metrics", 'node_exporter'),
                 (f"http://localhost:{self.config['cgroup_exporter_port']}/metrics", 'cgroup_exporter'),
-                (f"http://localhost:{self.config['nvidia_gpu_exporter_port']}/metrics", 'nvidia_gpu_exporter')
+                (f"http://localhost:{self.config['nvidia_gpu_exporter_port']}/metrics", 'nvidia_gpu_prometheus_exporter')
             ]
         }
         
@@ -459,7 +459,7 @@ class JobstatsValidator:
         print(f"\nChecking BCM category service management...")
         
         # Check if services are configured in Slurm category
-        for service in ['cgroup_exporter', 'node_exporter', 'nvidia_gpu_exporter']:
+        for service in ['cgroup_exporter', 'node_exporter', 'nvidia_gpu_prometheus_exporter']:
             success, stdout, stderr = self._run_command(
                 f'cmsh -c "category; use {slurm_category}; services; list" | grep {service}',
                 None  # Run locally on BCM headnode
@@ -471,7 +471,7 @@ class JobstatsValidator:
             )
         
         # Check if services are configured in Kubernetes category (should be disabled)
-        for service in ['cgroup_exporter', 'node_exporter', 'nvidia_gpu_exporter']:
+        for service in ['cgroup_exporter', 'node_exporter', 'nvidia_gpu_prometheus_exporter']:
             success, stdout, stderr = self._run_command(
                 f'cmsh -c "category; use {kubernetes_category}; services; list" | grep {service}',
                 None  # Run locally on BCM headnode
