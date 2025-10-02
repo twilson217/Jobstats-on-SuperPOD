@@ -1894,13 +1894,13 @@ EOF''',
             },
             {
                 'host': None,  # Run locally on BCM headnode
-                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "category; use {slurm_category}; services; add nvidia_gpu_prometheus_exporter; commit"',
-                'description': f'cmsh -c "category; use {slurm_category}; services; add nvidia_gpu_prometheus_exporter; commit"'
+                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "category; use {slurm_category}; services; add nvidia_gpu_exporter; commit"',
+                'description': f'cmsh -c "category; use {slurm_category}; services; add nvidia_gpu_exporter; commit"'
             },
             {
                 'host': None,  # Run locally on BCM headnode
-                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "category; use {slurm_category}; services; use nvidia_gpu_prometheus_exporter; set autostart yes; set monitored yes; commit"',
-                'description': f'cmsh -c "category; use {slurm_category}; services; use nvidia_gpu_prometheus_exporter; set autostart yes; set monitored yes; commit"'
+                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "category; use {slurm_category}; services; use nvidia_gpu_exporter; set autostart yes; set monitored yes; commit"',
+                'description': f'cmsh -c "category; use {slurm_category}; services; use nvidia_gpu_exporter; set autostart yes; set monitored yes; commit"'
             }
         ]
         
@@ -1934,13 +1934,13 @@ EOF''',
             },
             {
                 'host': None,  # Run locally on BCM headnode
-                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "category; use {kubernetes_category}; services; add nvidia_gpu_prometheus_exporter; commit"',
-                'description': f'cmsh -c "category; use {kubernetes_category}; services; add nvidia_gpu_prometheus_exporter; commit"'
+                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "category; use {kubernetes_category}; services; add nvidia_gpu_exporter; commit"',
+                'description': f'cmsh -c "category; use {kubernetes_category}; services; add nvidia_gpu_exporter; commit"'
             },
             {
                 'host': None,  # Run locally on BCM headnode
-                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "category; use {kubernetes_category}; services; use nvidia_gpu_prometheus_exporter; set autostart no; set monitored no; commit"',
-                'description': f'cmsh -c "category; use {kubernetes_category}; services; use nvidia_gpu_prometheus_exporter; set autostart no; set monitored no; commit"'
+                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "category; use {kubernetes_category}; services; use nvidia_gpu_exporter; set autostart no; set monitored no; commit"',
+                'description': f'cmsh -c "category; use {kubernetes_category}; services; use nvidia_gpu_exporter; set autostart no; set monitored no; commit"'
             }
         ]
         
@@ -1959,8 +1959,8 @@ EOF''',
         self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; use cgroup_exporter; set autostart yes; set monitored yes; commit\"")
         self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; add node_exporter; commit\"")
         self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; use node_exporter; set autostart yes; set monitored yes; commit\"")
-        self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; add nvidia_gpu_prometheus_exporter; commit\"")
-        self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; use nvidia_gpu_prometheus_exporter; set autostart yes; set monitored yes; commit\"")
+        self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; add nvidia_gpu_exporter; commit\"")
+        self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; use nvidia_gpu_exporter; set autostart yes; set monitored yes; commit\"")
         self._add_to_document("```")
         self._add_to_document("")
         self._add_to_document("**Kubernetes Category Configuration:**")
@@ -1971,8 +1971,8 @@ EOF''',
         self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; use cgroup_exporter; set autostart no; set monitored no; commit\"")
         self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; add node_exporter; commit\"")
         self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; use node_exporter; set autostart no; set monitored no; commit\"")
-        self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; add nvidia_gpu_prometheus_exporter; commit\"")
-        self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; use nvidia_gpu_prometheus_exporter; set autostart no; set monitored no; commit\"")
+        self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; add nvidia_gpu_exporter; commit\"")
+        self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; use nvidia_gpu_exporter; set autostart no; set monitored no; commit\"")
         self._add_to_document("```")
         self._add_to_document("")
         
