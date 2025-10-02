@@ -127,7 +127,7 @@ class GuidedJobstatsSetup:
             {
                 'id': 'bcm_configurations',
                 'title': 'Additional BCM Configurations',
-                'description': 'Configure BCM category-based service management and imaging',
+                'description': 'BCM imaging workflow instructions',
                 'completed': False
             }
         ]
@@ -1823,164 +1823,26 @@ EOF''',
         return True
 
     def section_bcm_configurations(self):
-        """Section 10: Additional BCM Configurations"""
+        """Section 10: BCM Imaging Workflow"""
         self._print_header(
-            "10. Additional BCM Configurations",
-            "Configure BCM category-based service management and imaging"
+            "10. BCM Imaging Workflow",
+            "BCM imaging workflow instructions"
         )
         
         # Add to document
-        self._add_to_document("## 10. Additional BCM Configurations")
+        self._add_to_document("## 10. BCM Imaging Workflow")
         self._add_to_document("")
         self._add_to_document("### Description")
         self._add_to_document("")
-        self._add_to_document("This section configures BCM category-based service management")
-        self._add_to_document("and provides instructions for BCM imaging workflow.")
+        self._add_to_document("This section provides instructions for BCM imaging workflow")
+        self._add_to_document("to deploy jobstats to additional nodes of the same type.")
         self._add_to_document("")
-        self._add_to_document("### What we'll do")
-        self._add_to_document("")
-        self._add_to_document("- 10a. Configure BCM category-based service management")
-        self._add_to_document("- 10b. BCM imaging workflow instructions")
-        self._add_to_document("")
+        print(f"{Colors.BLUE}This section provides instructions for BCM imaging workflow{Colors.END}")
+        print(f"{Colors.BLUE}to deploy jobstats to additional nodes of the same type.{Colors.END}")
         
-        print(f"{Colors.BLUE}This section configures BCM category-based service management{Colors.END}")
-        print(f"{Colors.BLUE}and provides instructions for BCM imaging workflow.{Colors.END}")
-        
-        print(f"\n{Colors.BOLD}{Colors.WHITE}What we'll do:{Colors.END}")
-        print(f"• 10a. Configure BCM category-based service management")
-        print(f"• 10b. BCM imaging workflow instructions")
-        
-        # Subsection 10a: BCM Category Service Management
-        print(f"\n{Colors.BOLD}{Colors.CYAN}10a. Configure BCM category-based service management{Colors.END}")
-        self._add_to_document("### 10a. Configure BCM category-based service management")
-        self._add_to_document("")
-        self._add_to_document("#### BCM Category Service Management")
-        self._add_to_document("")
-        self._add_to_document("BCM provides category-based service management where services are")
-        self._add_to_document("automatically started/stopped when nodes switch between categories.")
-        self._add_to_document("")
-        self._add_to_document("**Jobstats services should be configured as follows:**")
-        self._add_to_document("- **Slurm category:** Services enabled with autostart=yes")
-        self._add_to_document("- **Kubernetes category:** Services disabled with autostart=no")
-        self._add_to_document("")
-        
-        # Get categories from config
-        slurm_category = self.config.get('slurm_category', 'dgx')
-        kubernetes_category = self.config.get('kubernetes_category', 'runai')
-        
-        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 1: Configure services for Slurm category ({slurm_category}){Colors.END}")
-        
-        # Commands for Slurm category
-        slurm_category_commands = [
-            {
-                'host': None,  # Run locally on BCM headnode
-                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "category; use {slurm_category}; services; add cgroup_exporter; commit"',
-                'description': f'cmsh -c "category; use {slurm_category}; services; add cgroup_exporter; commit"'
-            },
-            {
-                'host': None,  # Run locally on BCM headnode
-                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "category; use {slurm_category}; services; use cgroup_exporter; set autostart yes; set monitored yes; commit"',
-                'description': f'cmsh -c "category; use {slurm_category}; services; use cgroup_exporter; set autostart yes; set monitored yes; commit"'
-            },
-            {
-                'host': None,  # Run locally on BCM headnode
-                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "category; use {slurm_category}; services; add node_exporter; commit"',
-                'description': f'cmsh -c "category; use {slurm_category}; services; add node_exporter; commit"'
-            },
-            {
-                'host': None,  # Run locally on BCM headnode
-                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "category; use {slurm_category}; services; use node_exporter; set autostart yes; set monitored yes; commit"',
-                'description': f'cmsh -c "category; use {slurm_category}; services; use node_exporter; set autostart yes; set monitored yes; commit"'
-            },
-            {
-                'host': None,  # Run locally on BCM headnode
-                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "category; use {slurm_category}; services; add nvidia_gpu_exporter; commit"',
-                'description': f'cmsh -c "category; use {slurm_category}; services; add nvidia_gpu_exporter; commit"'
-            },
-            {
-                'host': None,  # Run locally on BCM headnode
-                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "category; use {slurm_category}; services; use nvidia_gpu_exporter; set autostart yes; set monitored yes; commit"',
-                'description': f'cmsh -c "category; use {slurm_category}; services; use nvidia_gpu_exporter; set autostart yes; set monitored yes; commit"'
-            }
-        ]
-        
-        if not self._execute_commands(slurm_category_commands, "Slurm Category Configuration"):
-            print(f"\n{Colors.RED}✗ Failed to configure Slurm category services{Colors.END}")
-            return False
-        
-        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 2: Configure services for Kubernetes category ({kubernetes_category}){Colors.END}")
-        
-        # Commands for Kubernetes category
-        kubernetes_category_commands = [
-            {
-                'host': None,  # Run locally on BCM headnode
-                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "category; use {kubernetes_category}; services; add cgroup_exporter; commit"',
-                'description': f'cmsh -c "category; use {kubernetes_category}; services; add cgroup_exporter; commit"'
-            },
-            {
-                'host': None,  # Run locally on BCM headnode
-                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "category; use {kubernetes_category}; services; use cgroup_exporter; set autostart no; set monitored no; commit"',
-                'description': f'cmsh -c "category; use {kubernetes_category}; services; use cgroup_exporter; set autostart no; set monitored no; commit"'
-            },
-            {
-                'host': None,  # Run locally on BCM headnode
-                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "category; use {kubernetes_category}; services; add node_exporter; commit"',
-                'description': f'cmsh -c "category; use {kubernetes_category}; services; add node_exporter; commit"'
-            },
-            {
-                'host': None,  # Run locally on BCM headnode
-                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "category; use {kubernetes_category}; services; use node_exporter; set autostart no; set monitored no; commit"',
-                'description': f'cmsh -c "category; use {kubernetes_category}; services; use node_exporter; set autostart no; set monitored no; commit"'
-            },
-            {
-                'host': None,  # Run locally on BCM headnode
-                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "category; use {kubernetes_category}; services; add nvidia_gpu_exporter; commit"',
-                'description': f'cmsh -c "category; use {kubernetes_category}; services; add nvidia_gpu_exporter; commit"'
-            },
-            {
-                'host': None,  # Run locally on BCM headnode
-                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "category; use {kubernetes_category}; services; use nvidia_gpu_exporter; set autostart no; set monitored no; commit"',
-                'description': f'cmsh -c "category; use {kubernetes_category}; services; use nvidia_gpu_exporter; set autostart no; set monitored no; commit"'
-            }
-        ]
-        
-        if not self._execute_commands(kubernetes_category_commands, "Kubernetes Category Configuration"):
-            print(f"\n{Colors.RED}✗ Failed to configure Kubernetes category services{Colors.END}")
-            return False
-        
-        # Add BCM category configuration to document
-        self._add_to_document("#### BCM Category Service Configuration")
-        self._add_to_document("")
-        self._add_to_document("**Slurm Category Configuration:**")
-        self._add_to_document("")
-        self._add_to_document("```bash")
-        self._add_to_document(f"# Configure services for Slurm category ({slurm_category})")
-        self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; add cgroup_exporter; commit\"")
-        self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; use cgroup_exporter; set autostart yes; set monitored yes; commit\"")
-        self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; add node_exporter; commit\"")
-        self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; use node_exporter; set autostart yes; set monitored yes; commit\"")
-        self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; add nvidia_gpu_exporter; commit\"")
-        self._add_to_document(f"cmsh -c \"category; use {slurm_category}; services; use nvidia_gpu_exporter; set autostart yes; set monitored yes; commit\"")
-        self._add_to_document("```")
-        self._add_to_document("")
-        self._add_to_document("**Kubernetes Category Configuration:**")
-        self._add_to_document("")
-        self._add_to_document("```bash")
-        self._add_to_document(f"# Configure services for Kubernetes category ({kubernetes_category})")
-        self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; add cgroup_exporter; commit\"")
-        self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; use cgroup_exporter; set autostart no; set monitored no; commit\"")
-        self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; add node_exporter; commit\"")
-        self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; use node_exporter; set autostart no; set monitored no; commit\"")
-        self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; add nvidia_gpu_exporter; commit\"")
-        self._add_to_document(f"cmsh -c \"category; use {kubernetes_category}; services; use nvidia_gpu_exporter; set autostart no; set monitored no; commit\"")
-        self._add_to_document("```")
-        self._add_to_document("")
-        
-        # Subsection 10b: BCM Imaging Workflow
-        print(f"\n{Colors.BOLD}{Colors.CYAN}10b. BCM imaging workflow instructions{Colors.END}")
-        self._add_to_document("### 10b. BCM imaging workflow instructions")
-        self._add_to_document("")
-        self._add_to_document("#### BCM Imaging Process")
+        # BCM Imaging Workflow
+        print(f"\n{Colors.BOLD}{Colors.CYAN}BCM imaging workflow instructions{Colors.END}")
+        self._add_to_document("### BCM Imaging Process")
         self._add_to_document("")
         self._add_to_document("After successful deployment on representative nodes, capture images")
         self._add_to_document("for each node type to enable deployment to all nodes of the same type.")
@@ -1994,7 +1856,7 @@ EOF''',
                     hosts_by_role[host] = []
                 hosts_by_role[host].append(role)
         
-        print(f"\n{Colors.BOLD}{Colors.YELLOW}Step 3: BCM imaging instructions{Colors.END}")
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}BCM imaging instructions{Colors.END}")
         
         # Print imaging instructions for each unique host
         imaging_instructions = []

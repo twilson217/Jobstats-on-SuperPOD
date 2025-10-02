@@ -451,36 +451,6 @@ class JobstatsValidator:
                     False,
                     f"Not set to {expected_value} or missing"
                 )
-        
-        # Check BCM category service management
-        slurm_category = self.config.get('slurm_category', 'dgx')
-        kubernetes_category = self.config.get('kubernetes_category', 'runai')
-        
-        print(f"\nChecking BCM category service management...")
-        
-        # Check if services are configured in Slurm category
-        for service in ['cgroup_exporter', 'node_exporter', 'nvidia_gpu_exporter']:
-            success, stdout, stderr = self._run_command(
-                f'cmsh -c "category; use {slurm_category}; services; list" | grep {service}',
-                None  # Run locally on BCM headnode
-            )
-            self._test_result(
-                f"BCM: {service} in {slurm_category} category",
-                success,
-                "Service configured" if success else "Service not configured"
-            )
-        
-        # Check if services are configured in Kubernetes category (should be disabled)
-        for service in ['cgroup_exporter', 'node_exporter', 'nvidia_gpu_exporter']:
-            success, stdout, stderr = self._run_command(
-                f'cmsh -c "category; use {kubernetes_category}; services; list" | grep {service}',
-                None  # Run locally on BCM headnode
-            )
-            self._test_result(
-                f"BCM: {service} in {kubernetes_category} category",
-                success,
-                "Service configured (should be disabled)" if success else "Service not configured"
-            )
     
     def validate_data_quality(self):
         """Validate data quality and check for known issues."""
