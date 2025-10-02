@@ -1792,20 +1792,19 @@ EOF''',
             return False
         
         # Update config.py with correct Prometheus server address
-        config_update_commands = []
-        for login_node in self.config['systems']['login_nodes']:
-            config_update_commands.extend([
-                {
-                    'host': login_node,
-                    'command': f'sed -i "s|http://cluster-stats:8480|http://{self.config["prometheus_server"]}:{self.config["prometheus_port"]}|g" /usr/local/jobstats/config.py',
-                    'description': f'Update Prometheus server address in config.py on {login_node}'
-                },
-                {
-                    'host': login_node,
-                    'command': f'sed -i "s|PROM_RETENTION_DAYS = 365|PROM_RETENTION_DAYS = {self.config.get("prometheus_retention_days", 365)}|g" /usr/local/jobstats/config.py',
-                    'description': f'Update Prometheus retention days in config.py on {login_node}'
-                }
-            ])
+        # Since config.py is now in shared storage, we only need to update it once
+        config_update_commands = [
+            {
+                'host': None,  # Run locally on BCM headnode
+                'command': f'sed -i "s|http://cluster-stats:8480|http://{self.config["prometheus_server"]}:{self.config["prometheus_port"]}|g" /cm/shared/apps/jobstats/config.py',
+                'description': 'Update Prometheus server address in shared config.py'
+            },
+            {
+                'host': None,  # Run locally on BCM headnode
+                'command': f'sed -i "s|PROM_RETENTION_DAYS = 365|PROM_RETENTION_DAYS = {self.config.get("prometheus_retention_days", 365)}|g" /cm/shared/apps/jobstats/config.py',
+                'description': 'Update Prometheus retention days in shared config.py'
+            }
+        ]
         
         if self._execute_commands(config_update_commands):
             print(f"\n{Colors.GREEN}✓ Jobstats configuration updated{Colors.END}")
