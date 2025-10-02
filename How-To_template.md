@@ -157,7 +157,7 @@ We need to configure three BCM settings to enable cgroup support:
 
 1. **ConstrainRAMSpace**: Enable memory constraints for jobs
 2. **ConstrainCores**: Enable CPU core constraints for jobs
-3. **SelectTypeParameters**: Set to `CR_CPU_Memory` for cgroup resource tracking
+3. **SelectTypeParameters**: Set to `CR_Core_Memory` for cgroup resource tracking
 
 ### Commands for BCM Cgroup Configuration
 
