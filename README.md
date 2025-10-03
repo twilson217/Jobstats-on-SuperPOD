@@ -34,7 +34,7 @@ For automated deployment with guided configuration, see the [Automation Guide](a
 
 ### Manual Deployment
 
-For manual step-by-step deployment, see [How-To_template.md](How-To_template.md) for comprehensive instructions covering all aspects of the deployment process.
+For manual step-by-step deployment, see [How-To-Guide.md](How-To-Guide.md) for comprehensive instructions covering all aspects of the deployment process.
 
 ## Prerequisites
 
@@ -134,8 +134,14 @@ The jobstats platform consists of several components distributed across differen
 | node_exporter | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
 | prometheus | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
 | grafana | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| jobstats command | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ |
+| jobstats command | 🔶 | 🔶 | ✅ | ❌ | ❌ | ❌ |
 | slurm prolog/epilog | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| bcm role monitor | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
+
+**Legend:**
+- ✅ Required
+- 🔶 Optional
+- ❌ Not needed
 
 ## Troubleshooting
 
