@@ -125,6 +125,12 @@ class GuidedJobstatsSetup:
                 'completed': False
             },
             {
+                'id': 'bcm_role_monitor',
+                'title': 'BCM Role Monitor',
+                'description': 'Deploy BCM role monitoring service to DGX nodes',
+                'completed': False
+            },
+            {
                 'id': 'bcm_configurations',
                 'title': 'Additional BCM Configurations',
                 'description': 'BCM imaging workflow instructions',
@@ -635,12 +641,12 @@ python3 /tmp/update_slurm_conf.py''',
                 },
                 {
                     'host': dgx_node,
-                    'command': 'systemctl stop cgroup_exporter || true && sleep 2',
+                    'command': 'systemctl stop cgroup_exporter || true && sleep 3 && timeout 30 bash -c "while pgrep -x cgroup_exporter > /dev/null 2>&1; do echo \"Waiting for cgroup_exporter process to stop...\"; sleep 2; done" || echo "Timeout reached, proceeding anyway"',
                     'description': f'Stop cgroup_exporter service on {dgx_node} (if running)'
                 },
                 {
                     'host': dgx_node,
-                    'command': f'cp {self.working_dir}/cgroup_exporter/cgroup_exporter /usr/local/bin/',
+                    'command': f'cp {self.working_dir}/cgroup_exporter/cgroup_exporter /usr/local/bin/ || (echo "Binary busy, trying with temp file..." && cp {self.working_dir}/cgroup_exporter/cgroup_exporter /usr/local/bin/cgroup_exporter.new && mv /usr/local/bin/cgroup_exporter.new /usr/local/bin/cgroup_exporter)',
                     'description': f'Install cgroup_exporter binary on {dgx_node}'
                 },
                 {
@@ -794,12 +800,12 @@ EOF''',
                 },
                 {
                     'host': dgx_node,
-                    'command': 'systemctl stop nvidia_gpu_exporter || true && sleep 2',
+                    'command': 'systemctl stop nvidia_gpu_exporter || true && sleep 3 && timeout 30 bash -c "while pgrep -x nvidia_gpu_prometheus_exporter > /dev/null 2>&1; do echo \"Waiting for nvidia_gpu_prometheus_exporter process to stop...\"; sleep 2; done" || echo "Timeout reached, proceeding anyway"',
                     'description': f'Stop nvidia_gpu_exporter service on {dgx_node} (if running)'
                 },
                 {
                     'host': dgx_node,
-                    'command': f'cp {self.working_dir}/nvidia_gpu_prometheus_exporter/nvidia_gpu_prometheus_exporter /usr/local/bin/',
+                    'command': f'cp {self.working_dir}/nvidia_gpu_prometheus_exporter/nvidia_gpu_prometheus_exporter /usr/local/bin/ || (echo "Binary busy, trying with temp file..." && cp {self.working_dir}/nvidia_gpu_prometheus_exporter/nvidia_gpu_prometheus_exporter /usr/local/bin/nvidia_gpu_prometheus_exporter.new && mv /usr/local/bin/nvidia_gpu_prometheus_exporter.new /usr/local/bin/nvidia_gpu_prometheus_exporter)',
                     'description': f'Install NVIDIA GPU exporter binary on {dgx_node}'
                 },
                 {
@@ -1065,12 +1071,12 @@ rm /tmp/nvidia_gpu_exporter.service''',
                 },
                 {
                     'host': dgx_node,
-                    'command': 'systemctl stop node_exporter || true && sleep 2',
+                    'command': 'systemctl stop node_exporter || true && sleep 3 && timeout 30 bash -c "while pgrep -x node_exporter > /dev/null 2>&1; do echo \"Waiting for node_exporter process to stop...\"; sleep 2; done" || echo "Timeout reached, proceeding anyway"',
                     'description': f'Stop node_exporter service on {dgx_node} (if running)'
                 },
                 {
                     'host': dgx_node,
-                    'command': f'cp {self.working_dir}/node_exporter/node_exporter /usr/local/bin/',
+                    'command': f'cp {self.working_dir}/node_exporter/node_exporter /usr/local/bin/ || (echo "Binary busy, trying with temp file..." && cp {self.working_dir}/node_exporter/node_exporter /usr/local/bin/node_exporter.new && mv /usr/local/bin/node_exporter.new /usr/local/bin/node_exporter)',
                     'description': f'Install node_exporter binary on {dgx_node}'
                 },
                 {
@@ -1822,15 +1828,156 @@ EOF''',
             print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
         return True
 
-    def section_bcm_configurations(self):
-        """Section 10: BCM Imaging Workflow"""
+    def section_bcm_role_monitor(self):
+        """Section 10: BCM Role Monitor"""
         self._print_header(
-            "10. BCM Imaging Workflow",
+            "10. BCM Role Monitor",
+            "Deploy BCM role monitoring service to DGX nodes"
+        )
+        
+        # Add to document
+        self._add_to_document("## 10. BCM Role Monitor")
+        self._add_to_document("")
+        self._add_to_document("### Description")
+        self._add_to_document("")
+        self._add_to_document("This section deploys the BCM role monitoring service to DGX nodes.")
+        self._add_to_document("The service monitors BCM role assignments and automatically manages")
+        self._add_to_document("jobstats exporter services based on whether the node has the slurmclient role.")
+        self._add_to_document("")
+        self._add_to_document("### What we'll do")
+        self._add_to_document("")
+        self._add_to_document("- Discover BCM headnodes using cmsh")
+        self._add_to_document("- Deploy BCM role monitor service to DGX nodes")
+        self._add_to_document("- Configure service with BCM headnode information")
+        self._add_to_document("- Copy BCM certificates to DGX nodes")
+        self._add_to_document("- Enable and start the monitoring service")
+        self._add_to_document("")
+        
+        print(f"{Colors.BLUE}This section deploys the BCM role monitoring service to DGX nodes.{Colors.END}")
+        print(f"{Colors.BLUE}The service monitors BCM role assignments and automatically manages{Colors.END}")
+        print(f"{Colors.BLUE}jobstats exporter services based on whether the node has the slurmclient role.{Colors.END}")
+        
+        print(f"\n{Colors.BOLD}{Colors.WHITE}What we'll do:{Colors.END}")
+        print(f"• Discover BCM headnodes using cmsh")
+        print(f"• Deploy BCM role monitor service to DGX nodes")
+        print(f"• Configure service with BCM headnode information")
+        print(f"• Copy BCM certificates to DGX nodes")
+        print(f"• Enable and start the monitoring service")
+        
+        # Check if BCM category management is enabled
+        if not self.config.get('bcm_category_management', True):
+            print(f"\n{Colors.YELLOW}BCM category management is disabled in configuration.{Colors.END}")
+            print(f"{Colors.YELLOW}Skipping BCM role monitor deployment.{Colors.END}")
+            self._add_to_document("**Note:** BCM category management is disabled - skipping deployment.")
+            return True
+        
+        # Get DGX nodes from config
+        dgx_nodes = []
+        if 'systems' in self.config and 'dgx_nodes' in self.config['systems']:
+            dgx_nodes = self.config['systems']['dgx_nodes']
+        
+        if not dgx_nodes:
+            print(f"\n{Colors.YELLOW}No DGX nodes configured for deployment.{Colors.END}")
+            print(f"{Colors.YELLOW}Skipping BCM role monitor deployment.{Colors.END}")
+            self._add_to_document("**Note:** No DGX nodes configured - skipping deployment.")
+            return True
+        
+        print(f"\n{Colors.BOLD}{Colors.CYAN}Deploying BCM Role Monitor{Colors.END}")
+        print(f"Target DGX nodes: {', '.join(dgx_nodes)}")
+        
+        # Import and run the deployment script
+        try:
+            import sys
+            from pathlib import Path
+            
+            # Add role-monitor directory to path
+            role_monitor_dir = Path(__file__).parent / 'role-monitor'
+            sys.path.insert(0, str(role_monitor_dir))
+            
+            # Import the deployer
+            from deploy_bcm_role_monitor import BCMRoleMonitorDeployer
+            
+            # Create deployer with current config
+            deployer_config = {
+                'dgx_nodes': dgx_nodes
+            }
+            
+            deployer = BCMRoleMonitorDeployer(deployer_config)
+            
+            if self.dry_run:
+                print(f"\n{Colors.BLUE}[DRY RUN] Would deploy BCM role monitor to: {', '.join(dgx_nodes)}{Colors.END}")
+                self._add_to_document("### Deployment Commands")
+                self._add_to_document("")
+                self._add_to_document("```bash")
+                self._add_to_document("# Deploy BCM role monitor to DGX nodes")
+                self._add_to_document(f"python3 automation/role-monitor/deploy_bcm_role_monitor.py --dgx-nodes {' '.join(dgx_nodes)}")
+                self._add_to_document("```")
+                self._add_to_document("")
+                return True
+            else:
+                # Run actual deployment
+                print(f"\n{Colors.YELLOW}Deploying BCM role monitor...{Colors.END}")
+                success = deployer.deploy()
+                
+                if success:
+                    print(f"\n{Colors.GREEN}✓ BCM role monitor deployed successfully{Colors.END}")
+                    self._add_to_document("### Deployment Results")
+                    self._add_to_document("")
+                    self._add_to_document("✓ BCM role monitor deployed successfully to all DGX nodes")
+                    self._add_to_document("")
+                    self._add_to_document("### Service Management")
+                    self._add_to_document("")
+                    self._add_to_document("The BCM role monitor service is now running on DGX nodes and will:")
+                    self._add_to_document("- Monitor BCM role assignments every 60 seconds")
+                    self._add_to_document("- Start jobstats exporters when slurmclient role is assigned")
+                    self._add_to_document("- Stop jobstats exporters when slurmclient role is removed")
+                    self._add_to_document("- Retry failed service starts up to 3 times over 30 minutes")
+                    self._add_to_document("")
+                    self._add_to_document("### Useful Commands")
+                    self._add_to_document("")
+                    self._add_to_document("```bash")
+                    self._add_to_document("# Check service status on DGX nodes")
+                    self._add_to_document("ssh <dgx-node> systemctl status bcm-role-monitor.service")
+                    self._add_to_document("")
+                    self._add_to_document("# View service logs")
+                    self._add_to_document("ssh <dgx-node> journalctl -u bcm-role-monitor.service -f")
+                    self._add_to_document("")
+                    self._add_to_document("# Check configuration")
+                    self._add_to_document("ssh <dgx-node> cat /etc/bcm-role-monitor/config.json")
+                    self._add_to_document("```")
+                    self._add_to_document("")
+                else:
+                    print(f"\n{Colors.RED}✗ BCM role monitor deployment failed{Colors.END}")
+                    self._add_to_document("### Deployment Results")
+                    self._add_to_document("")
+                    self._add_to_document("✗ BCM role monitor deployment failed")
+                    self._add_to_document("")
+                    self._add_to_document("Please check the deployment logs and retry manually if needed.")
+                    return False
+        
+        except ImportError as e:
+            print(f"\n{Colors.RED}✗ Failed to import BCM role monitor deployer: {e}{Colors.END}")
+            return False
+        except Exception as e:
+            print(f"\n{Colors.RED}✗ BCM role monitor deployment failed: {e}{Colors.END}")
+            return False
+        
+        if not self.dry_run:
+            self._safe_continue("Press Enter to continue...")
+        else:
+            print(f"\n{Colors.BLUE}[DRY RUN] Continuing to next section...{Colors.END}")
+        
+        return True
+
+    def section_bcm_configurations(self):
+        """Section 11: BCM Imaging Workflow"""
+        self._print_header(
+            "11. BCM Imaging Workflow",
             "BCM imaging workflow instructions"
         )
         
         # Add to document
-        self._add_to_document("## 10. BCM Imaging Workflow")
+        self._add_to_document("## 11. BCM Imaging Workflow")
         self._add_to_document("")
         self._add_to_document("### Description")
         self._add_to_document("")
