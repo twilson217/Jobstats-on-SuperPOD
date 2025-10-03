@@ -135,7 +135,8 @@ The jobstats platform consists of several components distributed across differen
 | prometheus | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
 | grafana | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | jobstats command | 🔶 | 🔶 | ✅ | ❌ | ❌ | ❌ |
-| slurm prolog/epilog | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| slurm prolog/epilog | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| slurmctld epilog | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | bcm role monitor | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
 
 **Legend:**
