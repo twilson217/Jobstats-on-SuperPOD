@@ -144,6 +144,28 @@ The jobstats platform consists of several components distributed across differen
 - 🔶 Optional
 - ❌ Not needed
 
+## Capacity Planning
+
+Before deploying jobstats, use the **Prometheus Capacity Planner** to estimate storage requirements.
+
+**Quick Start:**
+```bash
+# Copy the standalone script to your Slurm node
+scp capacity-planning/prometheus_capacity_planner.py user@slurm-login:/tmp/
+
+# Run analysis
+ssh user@slurm-login
+python3 /tmp/prometheus_capacity_planner.py --verbose
+```
+
+**Key Features:**
+- Zero external dependencies (Python stdlib only)
+- No Prometheus server required
+- Analyzes cluster configuration and job history
+- Provides storage estimates and hardware recommendations
+
+**See**: [capacity-planning/README.md](capacity-planning/README.md) for complete documentation
+
 ## Troubleshooting
 
 For troubleshooting information, see [Troubleshooting.md](Troubleshooting.md) which covers common issues and solutions for both basic deployment and visual features.
