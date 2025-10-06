@@ -307,4 +307,82 @@ For issues or questions:
 
 ---
 
+## Sources
+
+All capacity planning estimates in this tool are based on information from the following sources:
+
+### Prometheus Official Documentation
+- **Prometheus Storage Documentation**: [https://prometheus.io/docs/prometheus/latest/storage/](https://prometheus.io/docs/prometheus/latest/storage/)
+  - Storage formula and TSDB architecture
+  - Compression efficiency (~1-2 bytes per sample)
+  - Capacity planning guidelines
+
+### Prometheus Community Resources
+- **Robust Perception Blog**: [https://www.robustperception.io/](https://www.robustperception.io/)
+  - Prometheus capacity planning best practices
+  - Time series cardinality management
+  - Storage optimization techniques
+
+- **Prometheus Community Capacity Planning Guides**
+  - General guidance: 1-2 KB RAM per active time series
+  - Disk I/O and performance considerations
+
+### Exporter Repositories
+- **node_exporter**: [https://github.com/prometheus/node_exporter](https://github.com/prometheus/node_exporter)
+  - Standard system metrics exporter
+  - Typical cardinality: ~1,000-2,000 time series per node
+
+- **cgroup_exporter**: [https://github.com/plazonic/cgroup_exporter](https://github.com/plazonic/cgroup_exporter)
+  - Slurm cgroup metrics for job monitoring
+  - Typical cardinality: ~30-50 time series per job
+
+- **nvidia_gpu_prometheus_exporter**: [https://github.com/plazonic/nvidia_gpu_prometheus_exporter](https://github.com/plazonic/nvidia_gpu_prometheus_exporter)
+  - NVIDIA GPU metrics via nvidia-smi
+  - Typical cardinality: ~30-40 time series per GPU
+
+### Metric Cardinality Estimates
+
+The time series estimates used in this tool are conservative (slightly higher than typical) to ensure adequate provisioning:
+
+| Metric Source | Estimate Used | Typical Range | Basis |
+|---------------|---------------|---------------|-------|
+| node_exporter | 1,500 per node | 1,000-2,000 | Prometheus node_exporter documentation and empirical testing |
+| cgroup_exporter | 50 per job | 30-50 | plazonic/cgroup_exporter with --collect.fullslurm flag |
+| nvidia_gpu_exporter | 40 per GPU | 30-40 | plazonic/nvidia_gpu_prometheus_exporter with job tracking |
+| Bytes per sample | 1.5 bytes | 1-2 bytes | Prometheus TSDB compression (documented) |
+
+### Verification Methods
+
+You can verify actual cardinality on your system:
+
+```bash
+# Check node_exporter metrics count
+curl -s http://node:9100/metrics | grep -c "^[a-z]"
+
+# Check cgroup_exporter metrics (with jobs running)
+curl -s http://node:9306/metrics | grep "jobid=" | cut -d'{' -f1 | sort -u | wc -l
+
+# Check GPU exporter metrics
+curl -s http://node:9445/metrics | grep -c "^[a-z]"
+
+# Check actual Prometheus active time series
+curl -s http://prometheus:9090/api/v1/query?query=prometheus_tsdb_head_series
+```
+
+### Adjusting Estimates
+
+The cardinality constants are defined at the top of the `PrometheusCapacityPlanner` class and can be adjusted based on your actual measurements:
+
+```python
+NODE_EXPORTER_SERIES_PER_NODE = 1500  # Adjust based on your node_exporter config
+CGROUP_SERIES_PER_JOB = 50            # Adjust based on your cgroup_exporter config
+GPU_SERIES_PER_GPU = 30               # Adjust based on your GPU exporter config
+GPU_JOB_SERIES_PER_GPU = 10           # Job ownership tracking metrics
+BYTES_PER_SAMPLE = 1.5                # Prometheus TSDB compression average
+```
+
+**Note**: Estimates are intentionally conservative to prevent under-provisioning. Actual storage requirements may be 10-20% lower depending on your specific configuration and workload patterns.
+
+---
+
 **Ready to plan your Prometheus capacity? Just run `prometheus_capacity_planner.py`!** 🚀
