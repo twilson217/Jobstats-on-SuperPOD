@@ -3,7 +3,8 @@
 BCM Jobstats Deployment Validation Script
 
 This script validates that the jobstats deployment is working correctly across all nodes.
-It checks services, ports, metrics endpoints, Prometheus targets, and Slurm integration.
+It checks services, ports, metrics endpoints, Prometheus targets, Slurm integration, and
+BCM role monitor service (if enabled).
 
 Usage:
     python3 validate_jobstats_deployment.py [--config CONFIG_FILE] [--verbose]
@@ -795,6 +796,158 @@ class JobstatsValidator:
             print(f"\n{Colors.YELLOW}Note: Cgroup metrics are only available while jobs are running or briefly after completion.{Colors.END}")
             print(f"{Colors.YELLOW}If validation still fails, the cgroup_exporter may need configuration adjustment.{Colors.END}")
     
+    def validate_bcm_role_monitor(self):
+        """Validate BCM role monitor service and Prometheus target files."""
+        print(f"\n{Colors.BOLD}10. Checking BCM Role Monitor Service{Colors.END}")
+        print("=" * 50)
+        
+        # Check if BCM role monitor is enabled in config
+        deploy_bcm_role_monitor = self.config.get('deploy_bcm_role_monitor', False)
+        
+        if not deploy_bcm_role_monitor:
+            print(f"{Colors.YELLOW}BCM role monitor is not enabled in configuration - skipping checks{Colors.END}")
+            return
+        
+        dgx_nodes = self.config['systems'].get('dgx_nodes', [])
+        if not dgx_nodes:
+            self._test_result(
+                "BCM role monitor configuration",
+                False,
+                "No DGX nodes configured"
+            )
+            return
+        
+        # Determine Prometheus targets directory
+        prometheus_targets_dir = self.config.get('prometheus_targets_dir', '/cm/shared/apps/jobstats/prometheus-targets')
+        
+        print(f"Checking BCM role monitor on {len(dgx_nodes)} DGX node(s)...")
+        print(f"Prometheus targets directory: {prometheus_targets_dir}")
+        print("")
+        
+        for dgx_host in dgx_nodes:
+            # Check if bcm-role-monitor service is running
+            is_running = self._check_service('bcm-role-monitor', dgx_host)
+            self._test_result(
+                f"bcm-role-monitor service on {dgx_host}",
+                is_running,
+                f"Service {'running' if is_running else 'not running'}"
+            )
+            
+            if not is_running:
+                # If service is not running, skip further checks for this host
+                continue
+            
+            # Check if service is enabled
+            success, stdout, stderr = self._run_command(
+                "systemctl is-enabled bcm-role-monitor",
+                dgx_host
+            )
+            is_enabled = success and stdout.strip() == "enabled"
+            self._test_result(
+                f"bcm-role-monitor enabled on {dgx_host}",
+                is_enabled,
+                f"Service {'enabled' if is_enabled else 'not enabled'} at boot"
+            )
+            
+            # Check if config file exists
+            config_exists = self._check_file_exists('/etc/bcm-role-monitor/config.json', dgx_host)
+            self._test_result(
+                f"BCM role monitor config on {dgx_host}",
+                config_exists,
+                "Configuration file exists" if config_exists else "Configuration file missing"
+            )
+            
+            # Check if Prometheus target file was created
+            target_file = f"{prometheus_targets_dir}/{dgx_host}.json"
+            target_exists = self._check_file_exists(target_file, dgx_host)
+            
+            if target_exists:
+                # Read and validate the target file content
+                success, stdout, stderr = self._run_command(f"cat {target_file}", dgx_host)
+                if success:
+                    try:
+                        target_data = json.loads(stdout)
+                        
+                        # Validate structure: should be a list of target objects
+                        if isinstance(target_data, list) and len(target_data) > 0:
+                            # Check for expected exporters
+                            jobs_found = set()
+                            for target_obj in target_data:
+                                if 'labels' in target_obj and 'job' in target_obj['labels']:
+                                    jobs_found.add(target_obj['labels']['job'])
+                            
+                            expected_jobs = {'node_exporter', 'cgroup_exporter', 'gpu_exporter'}
+                            has_all_exporters = expected_jobs.issubset(jobs_found)
+                            
+                            self._test_result(
+                                f"Prometheus target file for {dgx_host}",
+                                has_all_exporters,
+                                f"Found exporters: {', '.join(sorted(jobs_found))}" if has_all_exporters else f"Missing exporters: {', '.join(expected_jobs - jobs_found)}"
+                            )
+                            
+                            # Validate target format
+                            for target_obj in target_data:
+                                if 'targets' in target_obj and len(target_obj['targets']) > 0:
+                                    target = target_obj['targets'][0]
+                                    job = target_obj.get('labels', {}).get('job', 'unknown')
+                                    
+                                    # Check if target includes hostname and port
+                                    if ':' in target and dgx_host in target:
+                                        self._log(f"  ✓ {job}: {target}", "DEBUG")
+                                    else:
+                                        self._test_result(
+                                            f"Target format for {job} on {dgx_host}",
+                                            False,
+                                            f"Invalid target format: {target}",
+                                            warning=True
+                                        )
+                        else:
+                            self._test_result(
+                                f"Prometheus target file for {dgx_host}",
+                                False,
+                                "Target file is empty or has invalid structure"
+                            )
+                    except json.JSONDecodeError as e:
+                        self._test_result(
+                            f"Prometheus target file for {dgx_host}",
+                            False,
+                            f"Invalid JSON in target file: {e}"
+                        )
+                else:
+                    self._test_result(
+                        f"Prometheus target file for {dgx_host}",
+                        False,
+                        "Could not read target file"
+                    )
+            else:
+                self._test_result(
+                    f"Prometheus target file for {dgx_host}",
+                    False,
+                    f"Target file not found at {target_file}"
+                )
+            
+            # Check service logs for recent activity
+            success, stdout, stderr = self._run_command(
+                "journalctl -u bcm-role-monitor --since '5 minutes ago' --no-pager | tail -5",
+                dgx_host
+            )
+            
+            if success and stdout.strip():
+                # Check for errors in recent logs
+                if 'ERROR' in stdout or 'Failed' in stdout:
+                    self._test_result(
+                        f"BCM role monitor logs on {dgx_host}",
+                        False,
+                        "Recent errors found in service logs",
+                        warning=True
+                    )
+                    if self.verbose:
+                        print(f"{Colors.YELLOW}Recent log excerpt:{Colors.END}")
+                        for line in stdout.strip().split('\n')[-3:]:
+                            print(f"    {line}")
+                else:
+                    self._log(f"BCM role monitor logs on {dgx_host} look healthy", "DEBUG")
+    
     def generate_report(self):
         """Generate a summary report."""
         print(f"\n{Colors.BOLD}Validation Summary{Colors.END}")
@@ -833,6 +986,7 @@ class JobstatsValidator:
             self.validate_jobstats_command()
             self.validate_bcm_requirements()
             self.validate_data_quality()
+            self.validate_bcm_role_monitor()
             
             return self.generate_report()
             
