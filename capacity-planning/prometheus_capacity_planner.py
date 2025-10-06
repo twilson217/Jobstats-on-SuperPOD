@@ -753,8 +753,20 @@ class PrometheusCapacityPlanner:
         self.log(f"  • RAM:                   {recommended_ram_gb:.0f} GB minimum", "INFO")
         self.log(f"                           {max(recommended_ram_gb * 2, 8):.0f} GB recommended", "INFO")
         
-        # CPU
-        self.log(f"  • CPU Cores:             4-8 cores recommended", "INFO")
+        # CPU (scale with cluster size and time series)
+        # Base: 4 cores, add 2 cores per 50k time series
+        if estimate.total_time_series < 25000:
+            recommended_cpu = "4 cores"
+        elif estimate.total_time_series < 50000:
+            recommended_cpu = "4-8 cores"
+        elif estimate.total_time_series < 100000:
+            recommended_cpu = "8-12 cores"
+        elif estimate.total_time_series < 200000:
+            recommended_cpu = "12-16 cores"
+        else:
+            recommended_cpu = "16+ cores"
+        
+        self.log(f"  • CPU Cores:             {recommended_cpu} recommended", "INFO")
         
         # Comparison scenarios
         self.log(f"\n{Colors.BOLD}Scenario Comparisons:{Colors.END}", "INFO")
