@@ -88,8 +88,10 @@ The BCM role monitor consists of three main components:
 - **Features**:
   - Monitors BCM REST API every 60 seconds
   - Manages systemd services based on role changes
+  - Automatically manages Prometheus target files for dynamic service discovery
   - Handles retry logic for failed service starts
   - Comprehensive logging and error handling
+  - Supports custom Prometheus targets directory via command-line argument
 
 #### 2. bcm-role-monitor.service
 - **Location**: `/etc/systemd/system/bcm-role-monitor.service` on DGX nodes
@@ -127,6 +129,19 @@ python3 automation/role-monitor/deploy_bcm_role_monitor.py --dgx-nodes dgx-01 dg
 # Deploy to all DGX nodes from config
 python3 automation/role-monitor/deploy_bcm_role_monitor.py --config automation/configs/config.json
 ```
+
+### Prometheus Integration
+
+The BCM role monitor automatically manages Prometheus service discovery:
+
+- **Automatic Target Management**: When a node receives the `slurmclient` role, it creates a JSON file containing all three exporters (node_exporter, cgroup_exporter, gpu_exporter)
+- **Dynamic Updates**: Target files are automatically created/removed based on role assignment
+- **Single File Per Node**: Each node manages one JSON file: `/cm/shared/apps/jobstats/prometheus-targets/<hostname>.json`
+- **Custom Directory Support**: Use `--prometheus-targets-dir` to specify a different shared storage location
+
+For detailed information, see:
+- `automation/role-monitor/CUSTOM_PROMETHEUS_TARGETS.md` - Custom targets directory configuration
+- `PROMETHEUS_DYNAMIC_TARGETS_SIMPLIFIED.md` - Technical implementation details
 
 ### Configuration
 

@@ -11,6 +11,7 @@
   "use_existing_prometheus": true,
   "use_existing_grafana": true,
   "bcm_category_management": true,
+  "prometheus_targets_dir": "/your-shared-storage/prometheus/service-discovery",
   "slurm_category": "slurm-category",
   "kubernetes_category": "kubernetes-category",
   "systems": {

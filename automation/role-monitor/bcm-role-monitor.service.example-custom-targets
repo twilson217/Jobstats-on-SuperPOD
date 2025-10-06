@@ -8,7 +8,8 @@ StartLimitIntervalSec=0
 Type=simple
 User=root
 Group=root
-ExecStart=/usr/bin/python3 /usr/local/bin/bcm_role_monitor.py
+# Example: Using a custom Prometheus targets directory
+ExecStart=/usr/bin/python3 /usr/local/bin/bcm_role_monitor.py --prometheus-targets-dir /my/custom/prometheus/targets
 Restart=always
 RestartSec=30
 StandardOutput=journal
@@ -19,7 +20,8 @@ SyslogIdentifier=bcm-role-monitor
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/bcm-role-monitor /var/log /etc/bcm-role-monitor /cm/shared/apps/jobstats/prometheus-targets
+# IMPORTANT: Update ReadWritePaths to include your custom targets directory
+ReadWritePaths=/var/lib/bcm-role-monitor /var/log /etc/bcm-role-monitor /my/custom/prometheus/targets
 PrivateTmp=true
 
 # Environment

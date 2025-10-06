@@ -1831,38 +1831,77 @@ EOF''',
     def section_bcm_role_monitor(self):
         """Section 10: BCM Role Monitor"""
         self._print_header(
-            "10. BCM Role Monitor",
+            "10. BCM Role Monitor (Optional)",
             "Deploy BCM role monitoring service to DGX nodes"
         )
         
         # Add to document
-        self._add_to_document("## 10. BCM Role Monitor")
+        self._add_to_document("## 10. BCM Role Monitor (Optional)")
         self._add_to_document("")
         self._add_to_document("### Description")
         self._add_to_document("")
         self._add_to_document("This section deploys the BCM role monitoring service to DGX nodes.")
         self._add_to_document("The service monitors BCM role assignments and automatically manages")
-        self._add_to_document("jobstats exporter services based on whether the node has the slurmclient role.")
+        self._add_to_document("jobstats exporter services and Prometheus targets based on whether")
+        self._add_to_document("the node has the slurmclient role.")
         self._add_to_document("")
         self._add_to_document("### What we'll do")
         self._add_to_document("")
         self._add_to_document("- Discover BCM headnodes using cmsh")
         self._add_to_document("- Deploy BCM role monitor service to DGX nodes")
         self._add_to_document("- Configure service with BCM headnode information")
+        self._add_to_document("- Configure Prometheus targets directory (default or custom)")
         self._add_to_document("- Copy BCM certificates to DGX nodes")
         self._add_to_document("- Enable and start the monitoring service")
         self._add_to_document("")
         
         print(f"{Colors.BLUE}This section deploys the BCM role monitoring service to DGX nodes.{Colors.END}")
-        print(f"{Colors.BLUE}The service monitors BCM role assignments and automatically manages{Colors.END}")
-        print(f"{Colors.BLUE}jobstats exporter services based on whether the node has the slurmclient role.{Colors.END}")
+        print(f"{Colors.BLUE}The service monitors BCM role assignments and automatically manages:{Colors.END}")
+        print(f"{Colors.BLUE}  • Jobstats exporter services (start/stop based on role){Colors.END}")
+        print(f"{Colors.BLUE}  • Prometheus target files (dynamic service discovery){Colors.END}")
         
         print(f"\n{Colors.BOLD}{Colors.WHITE}What we'll do:{Colors.END}")
         print(f"• Discover BCM headnodes using cmsh")
         print(f"• Deploy BCM role monitor service to DGX nodes")
         print(f"• Configure service with BCM headnode information")
+        print(f"• Configure Prometheus targets directory")
         print(f"• Copy BCM certificates to DGX nodes")
         print(f"• Enable and start the monitoring service")
+        
+        # Ask if user wants to deploy BCM role monitor
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Do you want to deploy the BCM role monitor?{Colors.END}")
+        print(f"{Colors.CYAN}The BCM role monitor provides automatic management of:{Colors.END}")
+        print(f"  • Exporter services based on BCM role assignment")
+        print(f"  • Prometheus target files for dynamic service discovery")
+        print(f"{Colors.CYAN}This is useful for dynamic cluster configurations where nodes")
+        print(f"move between different BCM categories/roles.{Colors.END}")
+        
+        if self.non_interactive or self.dry_run:
+            # In non-interactive/dry-run mode, determine defaults based on use_existing_prometheus
+            use_existing_prometheus = self.config.get('use_existing_prometheus', False)
+            
+            # Default to deploying BCM role monitor
+            deploy_monitor = self.config.get('deploy_bcm_role_monitor', True)
+            
+            print(f"\n{Colors.BLUE}[Non-interactive/Dry-run mode] Deploy BCM role monitor: {deploy_monitor}{Colors.END}")
+            if use_existing_prometheus:
+                print(f"{Colors.BLUE}[Auto-configured] Using existing Prometheus - will prompt for custom targets directory{Colors.END}")
+            else:
+                print(f"{Colors.BLUE}[Auto-configured] New Prometheus deployment - will use default targets directory{Colors.END}")
+        else:
+            response = input(f"\n{Colors.BOLD}Deploy BCM role monitor? (yes/no) [{Colors.GREEN}yes{Colors.END}]: ").strip().lower()
+            deploy_monitor = response in ['', 'y', 'yes']
+        
+        if not deploy_monitor:
+            print(f"\n{Colors.YELLOW}Skipping BCM role monitor deployment.{Colors.END}")
+            self._add_to_document("**Note:** User chose to skip BCM role monitor deployment.")
+            self._add_to_document("")
+            self._add_to_document("If you need to deploy it later, you can run:")
+            self._add_to_document("```bash")
+            self._add_to_document("python3 automation/role-monitor/deploy_bcm_role_monitor.py --config automation/configs/config.json")
+            self._add_to_document("```")
+            self._add_to_document("")
+            return True
         
         # Check if BCM category management is enabled
         if not self.config.get('bcm_category_management', True):
@@ -1882,8 +1921,66 @@ EOF''',
             self._add_to_document("**Note:** No DGX nodes configured - skipping deployment.")
             return True
         
+        # Ask about Prometheus targets directory
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}Prometheus Targets Directory Configuration{Colors.END}")
+        print(f"{Colors.CYAN}The BCM role monitor creates Prometheus target files for dynamic service discovery.{Colors.END}")
+        print(f"{Colors.CYAN}Default location: /cm/shared/apps/jobstats/prometheus-targets/{Colors.END}")
+        print(f"\n{Colors.CYAN}If you have an existing Prometheus server with a different shared storage")
+        print(f"location, you can specify a custom directory.{Colors.END}")
+        
+        prometheus_targets_dir = None
+        if self.non_interactive or self.dry_run:
+            # Auto-configure based on use_existing_prometheus
+            use_existing_prometheus = self.config.get('use_existing_prometheus', False)
+            
+            if use_existing_prometheus:
+                # Using existing Prometheus - assume custom directory needed
+                use_custom = self.config.get('use_custom_prometheus_targets_dir', True)
+                if use_custom:
+                    # Get from config or prompt would be needed (but we're non-interactive)
+                    prometheus_targets_dir = self.config.get('prometheus_targets_dir')
+                    if not prometheus_targets_dir:
+                        # If not specified in config, we need to inform user
+                        print(f"\n{Colors.YELLOW}[Warning] Using existing Prometheus but no custom targets directory specified in config.{Colors.END}")
+                        print(f"{Colors.YELLOW}Please add 'prometheus_targets_dir' to your config.json{Colors.END}")
+                        print(f"{Colors.YELLOW}Using default directory for now: /cm/shared/apps/jobstats/prometheus-targets{Colors.END}")
+                        prometheus_targets_dir = None
+                    else:
+                        print(f"\n{Colors.BLUE}[Auto-configured] Using custom Prometheus targets directory: {prometheus_targets_dir}{Colors.END}")
+                        self._add_to_document(f"**Prometheus Targets Directory:** `{prometheus_targets_dir}` (custom - existing Prometheus)")
+            else:
+                # New Prometheus deployment - use default directory
+                use_custom = self.config.get('use_custom_prometheus_targets_dir', False)
+                if use_custom and 'prometheus_targets_dir' in self.config:
+                    prometheus_targets_dir = self.config['prometheus_targets_dir']
+                    print(f"\n{Colors.BLUE}[Auto-configured] Using custom directory from config: {prometheus_targets_dir}{Colors.END}")
+                    self._add_to_document(f"**Prometheus Targets Directory:** `{prometheus_targets_dir}` (custom)")
+                else:
+                    print(f"\n{Colors.BLUE}[Auto-configured] Using default Prometheus targets directory: /cm/shared/apps/jobstats/prometheus-targets{Colors.END}")
+                    self._add_to_document("**Prometheus Targets Directory:** `/cm/shared/apps/jobstats/prometheus-targets` (default)")
+        else:
+            # Interactive mode - ask user
+            response = input(f"\n{Colors.BOLD}Use custom Prometheus targets directory? (yes/no) [{Colors.GREEN}no{Colors.END}]: ").strip().lower()
+            use_custom = response in ['y', 'yes']
+            
+            if use_custom:
+                default_dir = '/cm/shared/apps/jobstats/prometheus-targets'
+                prometheus_targets_dir = input(f"{Colors.BOLD}Enter Prometheus targets directory [{Colors.GREEN}{default_dir}{Colors.END}]: ").strip()
+                if not prometheus_targets_dir:
+                    prometheus_targets_dir = default_dir
+                
+                print(f"\n{Colors.CYAN}Using custom Prometheus targets directory: {prometheus_targets_dir}{Colors.END}")
+                self._add_to_document(f"**Prometheus Targets Directory:** `{prometheus_targets_dir}` (custom)")
+            else:
+                print(f"\n{Colors.CYAN}Using default Prometheus targets directory: /cm/shared/apps/jobstats/prometheus-targets{Colors.END}")
+                self._add_to_document("**Prometheus Targets Directory:** `/cm/shared/apps/jobstats/prometheus-targets` (default)")
+        
+        self._add_to_document("")
+        
         print(f"\n{Colors.BOLD}{Colors.CYAN}Deploying BCM Role Monitor{Colors.END}")
         print(f"Target DGX nodes: {', '.join(dgx_nodes)}")
+        if prometheus_targets_dir:
+            print(f"Prometheus targets directory: {prometheus_targets_dir}")
         
         # Import and run the deployment script
         try:
@@ -1906,18 +2003,23 @@ EOF''',
             
             if self.dry_run:
                 print(f"\n{Colors.BLUE}[DRY RUN] Would deploy BCM role monitor to: {', '.join(dgx_nodes)}{Colors.END}")
+                if prometheus_targets_dir:
+                    print(f"{Colors.BLUE}[DRY RUN] With custom Prometheus targets directory: {prometheus_targets_dir}{Colors.END}")
                 self._add_to_document("### Deployment Commands")
                 self._add_to_document("")
                 self._add_to_document("```bash")
                 self._add_to_document("# Deploy BCM role monitor to DGX nodes")
-                self._add_to_document(f"python3 automation/role-monitor/deploy_bcm_role_monitor.py --dgx-nodes {' '.join(dgx_nodes)}")
+                deploy_cmd = f"python3 automation/role-monitor/deploy_bcm_role_monitor.py --dgx-nodes {' '.join(dgx_nodes)}"
+                if prometheus_targets_dir:
+                    deploy_cmd += f" --prometheus-targets-dir {prometheus_targets_dir}"
+                self._add_to_document(deploy_cmd)
                 self._add_to_document("```")
                 self._add_to_document("")
                 return True
             else:
                 # Run actual deployment
                 print(f"\n{Colors.YELLOW}Deploying BCM role monitor...{Colors.END}")
-                success = deployer.deploy()
+                success = deployer.deploy(prometheus_targets_dir=prometheus_targets_dir)
                 
                 if success:
                     print(f"\n{Colors.GREEN}✓ BCM role monitor deployed successfully{Colors.END}")
@@ -1925,12 +2027,16 @@ EOF''',
                     self._add_to_document("")
                     self._add_to_document("✓ BCM role monitor deployed successfully to all DGX nodes")
                     self._add_to_document("")
+                    if prometheus_targets_dir:
+                        self._add_to_document(f"✓ Configured with custom Prometheus targets directory: `{prometheus_targets_dir}`")
+                        self._add_to_document("")
                     self._add_to_document("### Service Management")
                     self._add_to_document("")
                     self._add_to_document("The BCM role monitor service is now running on DGX nodes and will:")
                     self._add_to_document("- Monitor BCM role assignments every 60 seconds")
                     self._add_to_document("- Start jobstats exporters when slurmclient role is assigned")
                     self._add_to_document("- Stop jobstats exporters when slurmclient role is removed")
+                    self._add_to_document("- Automatically manage Prometheus target files for service discovery")
                     self._add_to_document("- Retry failed service starts up to 3 times over 30 minutes")
                     self._add_to_document("")
                     self._add_to_document("### Useful Commands")
@@ -1944,6 +2050,13 @@ EOF''',
                     self._add_to_document("")
                     self._add_to_document("# Check configuration")
                     self._add_to_document("ssh <dgx-node> cat /etc/bcm-role-monitor/config.json")
+                    self._add_to_document("")
+                    if prometheus_targets_dir:
+                        self._add_to_document("# Check Prometheus target files")
+                        self._add_to_document(f"ls -la {prometheus_targets_dir}/")
+                    else:
+                        self._add_to_document("# Check Prometheus target files")
+                        self._add_to_document("ls -la /cm/shared/apps/jobstats/prometheus-targets/")
                     self._add_to_document("```")
                     self._add_to_document("")
                 else:

@@ -146,15 +146,50 @@ class BCMRoleMonitorDeployer:
                 'ssh', dgx_node, 'chmod +x /usr/local/bin/bcm_role_monitor.py'
             ], check=True)
             
-            # Copy systemd service
+            # Copy or generate systemd service
             src_service = self.script_dir / 'bcm-role-monitor.service'
             if not src_service.exists():
                 self.error(f"Source service file not found: {src_service}")
                 return False
             
-            subprocess.run([
-                'scp', str(src_service), f'{dgx_node}:/etc/systemd/system/bcm-role-monitor.service'
-            ], check=True)
+            # If custom prometheus_targets_dir is specified, generate custom service file
+            if hasattr(self, 'prometheus_targets_dir') and self.prometheus_targets_dir:
+                # Read the template service file
+                with open(src_service, 'r') as f:
+                    service_content = f.read()
+                
+                # Modify ExecStart to include --prometheus-targets-dir
+                service_content = service_content.replace(
+                    'ExecStart=/usr/bin/python3 /usr/local/bin/bcm_role_monitor.py',
+                    f'ExecStart=/usr/bin/python3 /usr/local/bin/bcm_role_monitor.py --prometheus-targets-dir {self.prometheus_targets_dir}'
+                )
+                
+                # Modify ReadWritePaths to include custom directory
+                service_content = service_content.replace(
+                    'ReadWritePaths=/var/lib/bcm-role-monitor /var/log /etc/bcm-role-monitor /cm/shared/apps/jobstats/prometheus-targets',
+                    f'ReadWritePaths=/var/lib/bcm-role-monitor /var/log /etc/bcm-role-monitor {self.prometheus_targets_dir}'
+                )
+                
+                # Write to temporary file
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.service', delete=False) as tmp_service:
+                    tmp_service.write(service_content)
+                    tmp_service_path = tmp_service.name
+                
+                try:
+                    # Copy the modified service file
+                    subprocess.run([
+                        'scp', tmp_service_path, f'{dgx_node}:/etc/systemd/system/bcm-role-monitor.service'
+                    ], check=True)
+                finally:
+                    # Clean up temp file
+                    import os
+                    os.unlink(tmp_service_path)
+            else:
+                # Copy the default service file
+                subprocess.run([
+                    'scp', str(src_service), f'{dgx_node}:/etc/systemd/system/bcm-role-monitor.service'
+                ], check=True)
             
             return True
             
@@ -286,9 +321,16 @@ class BCMRoleMonitorDeployer:
         self.success(f"Successfully deployed BCM role monitor to {dgx_node}")
         return True
     
-    def deploy(self) -> bool:
-        """Main deployment process"""
+    def deploy(self, prometheus_targets_dir: str = None) -> bool:
+        """Main deployment process
+        
+        Args:
+            prometheus_targets_dir: Optional custom Prometheus targets directory
+        """
         self.log("Starting BCM Role Monitor deployment...")
+        
+        # Store prometheus_targets_dir for use in deployment
+        self.prometheus_targets_dir = prometheus_targets_dir
         
         # Discover BCM headnodes
         bcm_headnodes = self.discover_bcm_headnodes()
@@ -302,6 +344,8 @@ class BCMRoleMonitorDeployer:
             return False
         
         self.log(f"Deploying to {len(self.dgx_nodes)} DGX node(s)...")
+        if prometheus_targets_dir:
+            self.log(f"Using custom Prometheus targets directory: {prometheus_targets_dir}")
         
         # Deploy to each DGX node
         success_count = 0

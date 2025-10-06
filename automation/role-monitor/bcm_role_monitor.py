@@ -19,6 +19,7 @@ import socket
 import logging
 import requests
 import urllib3
+import argparse
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Tuple
 
@@ -26,8 +27,10 @@ from typing import List, Optional, Dict, Tuple
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class BCMRoleMonitor:
-    def __init__(self, config_file: str = '/etc/bcm-role-monitor/config.json'):
+    def __init__(self, config_file: str = '/etc/bcm-role-monitor/config.json', 
+                 prometheus_targets_dir: Optional[str] = None):
         self.config_file = config_file
+        self.prometheus_targets_dir_override = prometheus_targets_dir
         self.config = self.load_config()
         self.hostname = socket.gethostname()
         self.state_file = f'/var/lib/bcm-role-monitor/{self.hostname}_state.json'
@@ -64,7 +67,12 @@ class BCMRoleMonitor:
             "key_path": "/etc/bcm-role-monitor/admin.key",
             "check_interval": 60,
             "retry_interval": 600,  # 10 minutes
-            "max_retries": 3
+            "max_retries": 3,
+            "prometheus_targets_dir": "/cm/shared/apps/jobstats/prometheus-targets",
+            "node_exporter_port": 9100,
+            "cgroup_exporter_port": 9306,
+            "nvidia_gpu_exporter_port": 9445,
+            "cluster_name": "slurm"
         }
         
         if os.path.exists(self.config_file):
@@ -252,6 +260,70 @@ class BCMRoleMonitor:
             self.logger.error(f"Error stopping service {service}: {e}")
             return False
     
+    def manage_prometheus_targets(self, should_be_scraped: bool):
+        """Add or remove this node from Prometheus scraping targets"""
+        # Use command-line override if provided, otherwise use config, otherwise use default
+        if self.prometheus_targets_dir_override:
+            target_base_dir = self.prometheus_targets_dir_override
+        else:
+            target_base_dir = self.config.get('prometheus_targets_dir', '/cm/shared/apps/jobstats/prometheus-targets')
+        
+        # Check if directory exists and is accessible
+        if not os.path.exists(target_base_dir):
+            self.logger.warning(f"Prometheus targets directory does not exist: {target_base_dir}")
+            return
+        
+        target_file = os.path.join(target_base_dir, f'{self.hostname}.json')
+        
+        if should_be_scraped:
+            # Create single target file with all exporters
+            self._create_prometheus_target(target_file)
+        else:
+            # Remove target file
+            self._remove_prometheus_target(target_file)
+    
+    def _create_prometheus_target(self, target_file: str):
+        """Create Prometheus target file atomically with all exporters"""
+        try:
+            exporters = {
+                'node_exporter': self.config.get('node_exporter_port', 9100),
+                'cgroup_exporter': self.config.get('cgroup_exporter_port', 9306),
+                'gpu_exporter': self.config.get('nvidia_gpu_exporter_port', 9445)
+            }
+            
+            # Create a list of targets - one entry per exporter
+            target_data = []
+            for exporter_name, port in exporters.items():
+                target_data.append({
+                    "targets": [f"{self.hostname}:{port}"],
+                    "labels": {
+                        "job": exporter_name,
+                        "cluster": self.config.get('cluster_name', 'slurm'),
+                        "hostname": self.hostname
+                    }
+                })
+            
+            # Write to temp file, then atomic move
+            temp_file = f"{target_file}.tmp"
+            with open(temp_file, 'w') as f:
+                json.dump(target_data, f, indent=2)
+            
+            # Atomic rename
+            os.rename(temp_file, target_file)
+            self.logger.info(f"Created Prometheus target file: {target_file}")
+            
+        except Exception as e:
+            self.logger.error(f"Error creating Prometheus target {target_file}: {e}")
+    
+    def _remove_prometheus_target(self, target_file: str):
+        """Remove Prometheus target file"""
+        try:
+            if os.path.exists(target_file):
+                os.remove(target_file)
+                self.logger.info(f"Removed Prometheus target file: {target_file}")
+        except Exception as e:
+            self.logger.error(f"Error removing Prometheus target {target_file}: {e}")
+    
     def load_state(self) -> Dict:
         """Load previous state"""
         if os.path.exists(self.state_file):
@@ -367,6 +439,9 @@ class BCMRoleMonitor:
                 # Manage services based on role
                 self.manage_services(has_slurmclient_role)
                 
+                # Manage Prometheus targets based on role
+                self.manage_prometheus_targets(has_slurmclient_role)
+                
                 # Save current state
                 current_state = {
                     'has_slurmclient_role': has_slurmclient_role,
@@ -388,7 +463,43 @@ class BCMRoleMonitor:
 
 def main():
     """Main entry point"""
-    monitor = BCMRoleMonitor()
+    parser = argparse.ArgumentParser(
+        description='BCM Role Monitor - Manages jobstats exporters and Prometheus targets based on BCM role assignment',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Use default configuration
+  %(prog)s
+  
+  # Override Prometheus targets directory
+  %(prog)s --prometheus-targets-dir /my/custom/targets
+  
+  # Use custom config file
+  %(prog)s --config /etc/my-config.json
+  
+  # Combine options
+  %(prog)s --config /etc/my-config.json --prometheus-targets-dir /shared/prometheus/targets
+        """
+    )
+    
+    parser.add_argument(
+        '--config',
+        default='/etc/bcm-role-monitor/config.json',
+        help='Path to configuration file (default: /etc/bcm-role-monitor/config.json)'
+    )
+    
+    parser.add_argument(
+        '--prometheus-targets-dir',
+        dest='prometheus_targets_dir',
+        help='Override Prometheus targets directory (default: from config or /cm/shared/apps/jobstats/prometheus-targets)'
+    )
+    
+    args = parser.parse_args()
+    
+    monitor = BCMRoleMonitor(
+        config_file=args.config,
+        prometheus_targets_dir=args.prometheus_targets_dir
+    )
     monitor.monitor_loop()
 
 if __name__ == "__main__":
