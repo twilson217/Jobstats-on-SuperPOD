@@ -53,17 +53,109 @@ prompt_with_default() {
 prompt_hostnames() {
     local role="$1"
     local var_name="$2"
+    local existing_var="$3"  # Name of variable containing existing hosts JSON
     local hosts=()
+    local existing_hosts=()
     
     echo ""
-    print_status "Enter hostnames for $role (one per line, press Enter twice when done):"
-    while true; do
-        read -p "  Hostname: " hostname
-        if [ -z "$hostname" ]; then
-            break
+    
+    # Check if we have existing hosts
+    if [ -n "$existing_var" ]; then
+        # Parse existing JSON array into bash array using Python
+        if command_exists python3; then
+            local existing_json="${!existing_var}"
+            if [ -n "$existing_json" ] && [ "$existing_json" != "[]" ]; then
+                # Load existing hosts
+                mapfile -t existing_hosts < <(python3 -c "
+import json
+import sys
+try:
+    hosts = json.loads('$existing_json')
+    for host in hosts:
+        print(host)
+except:
+    pass
+" 2>/dev/null)
+                
+                # Display existing hosts
+                if [ ${#existing_hosts[@]} -gt 0 ]; then
+                    print_warning "Existing hosts for $role:"
+                    for host in "${existing_hosts[@]}"; do
+                        echo "  - $host"
+                    done
+                    echo ""
+                    
+                    # Offer options
+                    echo "Options:"
+                    echo "  [K]eep - Keep existing hosts (default)"
+                    echo "  [A]dd  - Add new hosts to existing list"
+                    echo "  [C]hange - Replace with completely new list"
+                    echo ""
+                    read -p "Choose option (K/a/c): " host_option
+                    host_option=$(echo "$host_option" | tr '[:upper:]' '[:lower:]')
+                    
+                    case "$host_option" in
+                        a|add)
+                            print_status "Adding to existing hosts. Enter new hostnames (press Enter twice when done):"
+                            # Start with existing hosts
+                            hosts=("${existing_hosts[@]}")
+                            while true; do
+                                read -p "  New hostname: " hostname
+                                if [ -z "$hostname" ]; then
+                                    break
+                                fi
+                                hosts+=("$hostname")
+                            done
+                            ;;
+                        c|change)
+                            print_status "Enter new hostnames for $role (press Enter twice when done):"
+                            while true; do
+                                read -p "  Hostname: " hostname
+                                if [ -z "$hostname" ]; then
+                                    break
+                                fi
+                                hosts+=("$hostname")
+                            done
+                            ;;
+                        *|k|keep)
+                            print_status "Keeping existing hosts."
+                            hosts=("${existing_hosts[@]}")
+                            ;;
+                    esac
+                else
+                    # Empty existing array, prompt for new hosts
+                    print_status "Enter hostnames for $role (one per line, press Enter twice when done):"
+                    while true; do
+                        read -p "  Hostname: " hostname
+                        if [ -z "$hostname" ]; then
+                            break
+                        fi
+                        hosts+=("$hostname")
+                    done
+                fi
+            else
+                # No existing hosts, prompt for new
+                print_status "Enter hostnames for $role (one per line, press Enter twice when done):"
+                while true; do
+                    read -p "  Hostname: " hostname
+                    if [ -z "$hostname" ]; then
+                        break
+                    fi
+                    hosts+=("$hostname")
+                done
+            fi
         fi
-        hosts+=("$hostname")
-    done
+    else
+        # No existing config, prompt for new hosts
+        print_status "Enter hostnames for $role (one per line, press Enter twice when done):"
+        while true; do
+            read -p "  Hostname: " hostname
+            if [ -z "$hostname" ]; then
+                break
+            fi
+            hosts+=("$hostname")
+        done
+    fi
     
     # Convert array to JSON array format
     local json_array="["
@@ -161,33 +253,53 @@ main() {
     # Ensure config directory exists
     mkdir -p "$config_dir"
     
-    # Check if config.json already exists
+    # Check if config.json already exists and load existing values
+    local existing_config=false
     if [ -f "$config_file" ]; then
+        existing_config=true
         echo ""
         print_warning "Configuration file already exists: $config_file"
-        echo "Current configuration:"
-        cat "$config_file" | head -10
-        echo "..."
         echo ""
-        read -p "Would you like to overwrite the existing config.json? (y/N): " overwrite_config
-        overwrite_config=$(echo "$overwrite_config" | tr '[:upper:]' '[:lower:]')
+        print_status "You can update individual settings or keep existing values."
+        print_status "Press Enter to keep the current value shown in [brackets]."
+        echo ""
         
-        if [[ "$overwrite_config" != "y" && "$overwrite_config" != "yes" ]]; then
-            print_status "Keeping existing configuration file."
-            print_status "You can manually edit $config_file if needed."
-            echo ""
-            print_status "Next steps:"
-            echo "1. Review your configuration: cat $config_file"
-            echo "2. Run a dry-run deployment:"
-            echo "   uv run python automation/deploy_jobstats.py --config $config_file --dry-run"
-            echo "3. Deploy jobstats:"
-            echo "   uv run python automation/deploy_jobstats.py --config $config_file"
-            echo ""
-            # Skip to guided setup step
-            run_guided_setup_step "$config_file"
-            return 0
-        else
-            print_status "Overwriting existing configuration file..."
+        # Load existing configuration values using Python
+        if command_exists python3; then
+            eval "$(python3 -c "
+import json
+import sys
+try:
+    with open('$config_file', 'r') as f:
+        config = json.load(f)
+    
+    # Extract values with defaults
+    print(f\"existing_cluster_name='{config.get('cluster_name', 'slurm')}'\")
+    print(f\"existing_prometheus_server='{config.get('prometheus_server', 'prometheus-server')}'\")
+    print(f\"existing_grafana_server='{config.get('grafana_server', 'grafana-server')}'\")
+    print(f\"existing_prometheus_port={config.get('prometheus_port', 9090)}\")
+    print(f\"existing_grafana_port={config.get('grafana_port', 3000)}\")
+    print(f\"existing_node_exporter_port={config.get('node_exporter_port', 9100)}\")
+    print(f\"existing_cgroup_exporter_port={config.get('cgroup_exporter_port', 9306)}\")
+    print(f\"existing_nvidia_gpu_exporter_port={config.get('nvidia_gpu_exporter_port', 9445)}\")
+    print(f\"existing_prometheus_retention_days={config.get('prometheus_retention_days', 365)}\")
+    print(f\"existing_use_existing_prometheus='{str(config.get('use_existing_prometheus', False)).lower()}'\")
+    print(f\"existing_use_existing_grafana='{str(config.get('use_existing_grafana', False)).lower()}'\")
+    print(f\"existing_deploy_bcm_role_monitor='{str(config.get('deploy_bcm_role_monitor', True)).lower()}'\")
+    print(f\"existing_prometheus_targets_dir='{config.get('prometheus_targets_dir', '')}'\")
+    
+    # Extract systems arrays as JSON strings
+    systems = config.get('systems', {})
+    import json as j
+    print(f\"existing_slurm_controller_hosts='{j.dumps(systems.get('slurm_controller', []))}'\")
+    print(f\"existing_login_nodes_hosts='{j.dumps(systems.get('login_nodes', []))}'\")
+    print(f\"existing_dgx_nodes_hosts='{j.dumps(systems.get('dgx_nodes', []))}'\")
+    print(f\"existing_prometheus_server_hosts='{j.dumps(systems.get('prometheus_server', []))}'\")
+    print(f\"existing_grafana_server_hosts='{j.dumps(systems.get('grafana_server', []))}'\")
+except Exception as e:
+    print(f\"echo 'Error loading config: {e}' >&2\", file=sys.stderr)
+    sys.exit(1)
+" 2>/dev/null)"
         fi
     fi
     
@@ -195,72 +307,189 @@ main() {
     print_status "Step 4: Collecting configuration information..."
     echo ""
     
+    # Set defaults based on whether we have existing config
+    if [ "$existing_config" = true ]; then
+        default_cluster_name="${existing_cluster_name:-slurm}"
+        default_prometheus_server="${existing_prometheus_server:-prometheus-server}"
+        default_grafana_server="${existing_grafana_server:-grafana-server}"
+        default_prometheus_port="${existing_prometheus_port:-9090}"
+        default_grafana_port="${existing_grafana_port:-3000}"
+        default_node_exporter_port="${existing_node_exporter_port:-9100}"
+        default_cgroup_exporter_port="${existing_cgroup_exporter_port:-9306}"
+        default_nvidia_gpu_exporter_port="${existing_nvidia_gpu_exporter_port:-9445}"
+        default_prometheus_retention_days="${existing_prometheus_retention_days:-365}"
+    else
+        default_cluster_name="slurm"
+        default_prometheus_server="prometheus-server"
+        default_grafana_server="grafana-server"
+        default_prometheus_port="9090"
+        default_grafana_port="3000"
+        default_node_exporter_port="9100"
+        default_cgroup_exporter_port="9306"
+        default_nvidia_gpu_exporter_port="9445"
+        default_prometheus_retention_days="365"
+    fi
+    
     # Basic configuration
-    prompt_with_default "BCM wlm cluster name" "slurm" cluster_name
-    prompt_with_default "Prometheus server hostname" "prometheus-server" prometheus_server
-    prompt_with_default "Grafana server hostname" "grafana-server" grafana_server
+    prompt_with_default "BCM wlm cluster name" "$default_cluster_name" cluster_name
+    prompt_with_default "Prometheus server hostname" "$default_prometheus_server" prometheus_server
+    prompt_with_default "Grafana server hostname" "$default_grafana_server" grafana_server
     
     # Ports
-    prompt_with_default "Prometheus port" "9090" prometheus_port
-    prompt_with_default "Grafana port" "3000" grafana_port
-    prompt_with_default "Node exporter port" "9100" node_exporter_port
-    prompt_with_default "Cgroup exporter port" "9306" cgroup_exporter_port
-    prompt_with_default "NVIDIA GPU exporter port" "9445" nvidia_gpu_exporter_port
-    prompt_with_default "Prometheus retention days" "365" prometheus_retention_days
+    prompt_with_default "Prometheus port" "$default_prometheus_port" prometheus_port
+    prompt_with_default "Grafana port" "$default_grafana_port" grafana_port
+    prompt_with_default "Node exporter port" "$default_node_exporter_port" node_exporter_port
+    prompt_with_default "Cgroup exporter port" "$default_cgroup_exporter_port" cgroup_exporter_port
+    prompt_with_default "NVIDIA GPU exporter port" "$default_nvidia_gpu_exporter_port" nvidia_gpu_exporter_port
+    prompt_with_default "Prometheus retention days" "$default_prometheus_retention_days" prometheus_retention_days
     
     # Advanced options
     echo ""
     print_status "Advanced configuration options:"
     
-    read -p "Use existing Prometheus installation? (y/N): " use_existing_prometheus
+    # Determine prompts based on existing config
+    if [ "$existing_config" = true ]; then
+        if [[ "$existing_use_existing_prometheus" == "true" ]]; then
+            prom_prompt="Use existing Prometheus installation? (Y/n) [current: yes]: "
+            prom_default="yes"
+        else
+            prom_prompt="Use existing Prometheus installation? (y/N) [current: no]: "
+            prom_default="no"
+        fi
+        
+        if [[ "$existing_use_existing_grafana" == "true" ]]; then
+            grafana_prompt="Use existing Grafana installation? (Y/n) [current: yes]: "
+            grafana_default="yes"
+        else
+            grafana_prompt="Use existing Grafana installation? (y/N) [current: no]: "
+            grafana_default="no"
+        fi
+    else
+        prom_prompt="Use existing Prometheus installation? (y/N): "
+        prom_default="no"
+        grafana_prompt="Use existing Grafana installation? (y/N): "
+        grafana_default="no"
+    fi
+    
+    read -p "$prom_prompt" use_existing_prometheus
     use_existing_prometheus=$(echo "$use_existing_prometheus" | tr '[:upper:]' '[:lower:]')
+    if [ -z "$use_existing_prometheus" ]; then
+        use_existing_prometheus="$prom_default"
+    fi
     if [[ "$use_existing_prometheus" == "y" || "$use_existing_prometheus" == "yes" ]]; then
         use_existing_prometheus="true"
     else
         use_existing_prometheus="false"
     fi
     
-    read -p "Use existing Grafana installation? (y/N): " use_existing_grafana
+    read -p "$grafana_prompt" use_existing_grafana
     use_existing_grafana=$(echo "$use_existing_grafana" | tr '[:upper:]' '[:lower:]')
+    if [ -z "$use_existing_grafana" ]; then
+        use_existing_grafana="$grafana_default"
+    fi
     if [[ "$use_existing_grafana" == "y" || "$use_existing_grafana" == "yes" ]]; then
         use_existing_grafana="true"
     else
         use_existing_grafana="false"
     fi
     
-    read -p "Enable BCM category management? (Y/n): " bcm_category_management
-    bcm_category_management=$(echo "$bcm_category_management" | tr '[:upper:]' '[:lower:]')
-    if [[ "$bcm_category_management" == "n" || "$bcm_category_management" == "no" ]]; then
-        bcm_category_management="false"
+    # BCM Role Monitor deployment
+    echo ""
+    print_status "BCM Role Monitor Configuration:"
+    echo "The BCM role monitor service automatically manages jobstats exporters on DGX nodes"
+    echo "based on BCM role assignments. It also manages Prometheus target files for dynamic"
+    echo "service discovery."
+    echo ""
+    
+    # Determine BCM role monitor prompt based on existing config
+    if [ "$existing_config" = true ]; then
+        if [[ "$existing_deploy_bcm_role_monitor" == "true" ]]; then
+            bcm_prompt="Deploy BCM role monitor service? (Y/n) [current: yes]: "
+            bcm_default="yes"
+        else
+            bcm_prompt="Deploy BCM role monitor service? (y/N) [current: no]: "
+            bcm_default="no"
+        fi
     else
-        bcm_category_management="true"
+        bcm_prompt="Deploy BCM role monitor service? (Y/n): "
+        bcm_default="yes"
     fi
     
-    if [[ "$bcm_category_management" == "true" ]]; then
-        prompt_with_default "BCM category for DGX's running Slurm" "slurm-category" slurm_category
-        prompt_with_default "BCM category for DGX's running Kubernetes" "kubernetes-category" kubernetes_category
+    read -p "$bcm_prompt" deploy_bcm_role_monitor
+    deploy_bcm_role_monitor=$(echo "$deploy_bcm_role_monitor" | tr '[:upper:]' '[:lower:]')
+    if [ -z "$deploy_bcm_role_monitor" ]; then
+        deploy_bcm_role_monitor="$bcm_default"
+    fi
+    
+    if [[ "$deploy_bcm_role_monitor" == "n" || "$deploy_bcm_role_monitor" == "no" ]]; then
+        deploy_bcm_role_monitor="false"
+        prometheus_targets_dir=""
+        print_status "BCM role monitor will not be deployed."
     else
-        slurm_category="slurm-category"
-        kubernetes_category="kubernetes-category"
+        deploy_bcm_role_monitor="true"
+        
+        # Only ask about Prometheus targets directory if deploying the role monitor
+        echo ""
+        print_status "Prometheus Targets Configuration:"
+        echo "The BCM role monitor manages Prometheus target files for dynamic service discovery."
+        echo ""
+        
+        # Determine default for targets directory
+        if [ "$existing_config" = true ] && [ -n "$existing_prometheus_targets_dir" ]; then
+            default_targets_dir="$existing_prometheus_targets_dir"
+            targets_prompt="Prometheus targets directory [$default_targets_dir]: "
+            prompt_with_default "Prometheus targets directory" "$default_targets_dir" prometheus_targets_dir
+            if [ -n "$prometheus_targets_dir" ]; then
+                print_status "Using directory: $prometheus_targets_dir"
+            fi
+        else
+            read -p "Use default Prometheus targets directory (/cm/shared/apps/jobstats/prometheus-targets)? (Y/n): " use_default_targets_dir
+            use_default_targets_dir=$(echo "$use_default_targets_dir" | tr '[:upper:]' '[:lower:]')
+            
+            if [[ "$use_default_targets_dir" == "n" || "$use_default_targets_dir" == "no" ]]; then
+                prompt_with_default "Custom Prometheus targets directory" "/srv/prometheus/service-discovery" prometheus_targets_dir
+                print_status "Using custom directory: $prometheus_targets_dir"
+            else
+                prometheus_targets_dir=""
+                print_status "Using default directory: /cm/shared/apps/jobstats/prometheus-targets"
+            fi
+        fi
     fi
     
     # System hostnames
     echo ""
     print_status "System hostname configuration:"
-    echo "Enter hostnames for each system type. Press Enter twice when done with each type."
+    if [ "$existing_config" = false ]; then
+        echo "Enter hostnames for each system type. Press Enter twice when done with each type."
+    fi
     
-    prompt_hostnames "Slurm controller nodes" slurm_controller_hosts
-    prompt_hostnames "Login nodes" login_nodes_hosts
-    prompt_hostnames "DGX compute nodes" dgx_nodes_hosts
+    # Pass existing values if available
+    if [ "$existing_config" = true ]; then
+        prompt_hostnames "Slurm controller nodes" slurm_controller_hosts "existing_slurm_controller_hosts"
+        prompt_hostnames "Login nodes" login_nodes_hosts "existing_login_nodes_hosts"
+        prompt_hostnames "DGX compute nodes" dgx_nodes_hosts "existing_dgx_nodes_hosts"
+    else
+        prompt_hostnames "Slurm controller nodes" slurm_controller_hosts
+        prompt_hostnames "Login nodes" login_nodes_hosts
+        prompt_hostnames "DGX compute nodes" dgx_nodes_hosts
+    fi
     
     if [[ "$use_existing_prometheus" == "false" ]]; then
-        prompt_hostnames "Prometheus server nodes" prometheus_server_hosts
+        if [ "$existing_config" = true ]; then
+            prompt_hostnames "Prometheus server nodes" prometheus_server_hosts "existing_prometheus_server_hosts"
+        else
+            prompt_hostnames "Prometheus server nodes" prometheus_server_hosts
+        fi
     else
         prometheus_server_hosts="[]"
     fi
     
     if [[ "$use_existing_grafana" == "false" ]]; then
-        prompt_hostnames "Grafana server nodes" grafana_server_hosts
+        if [ "$existing_config" = true ]; then
+            prompt_hostnames "Grafana server nodes" grafana_server_hosts "existing_grafana_server_hosts"
+        else
+            prompt_hostnames "Grafana server nodes" grafana_server_hosts
+        fi
     else
         grafana_server_hosts="[]"
     fi
@@ -269,6 +498,7 @@ main() {
     print_status "Step 5: Creating configuration file..."
     
     # Create the JSON configuration
+    # Build the base configuration
     cat > "$config_file" << EOF
 {
   "cluster_name": "$cluster_name",
@@ -282,9 +512,18 @@ main() {
   "prometheus_retention_days": $prometheus_retention_days,
   "use_existing_prometheus": $use_existing_prometheus,
   "use_existing_grafana": $use_existing_grafana,
-  "bcm_category_management": $bcm_category_management,
-  "slurm_category": "$slurm_category",
-  "kubernetes_category": "$kubernetes_category",
+  "deploy_bcm_role_monitor": $deploy_bcm_role_monitor,
+EOF
+    
+    # Add prometheus_targets_dir if custom directory was specified
+    if [ -n "$prometheus_targets_dir" ]; then
+        cat >> "$config_file" << EOF
+  "prometheus_targets_dir": "$prometheus_targets_dir",
+EOF
+    fi
+    
+    # Complete the configuration
+    cat >> "$config_file" << EOF
   "systems": {
     "slurm_controller": $slurm_controller_hosts,
     "login_nodes": $login_nodes_hosts,
@@ -321,7 +560,14 @@ EOF
     echo "  Grafana: $grafana_server:$grafana_port"
     echo "  Existing Prometheus: $use_existing_prometheus"
     echo "  Existing Grafana: $use_existing_grafana"
-    echo "  BCM Category Management: $bcm_category_management"
+    echo "  Deploy BCM Role Monitor: $deploy_bcm_role_monitor"
+    if [[ "$deploy_bcm_role_monitor" == "true" ]]; then
+        if [ -n "$prometheus_targets_dir" ]; then
+            echo "  Prometheus Targets Directory: $prometheus_targets_dir (custom)"
+        else
+            echo "  Prometheus Targets Directory: /cm/shared/apps/jobstats/prometheus-targets (default)"
+        fi
+    fi
     echo ""
     
     print_success "Setup complete! You can now run the deployment script."

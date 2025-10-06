@@ -132,16 +132,15 @@ python3 automation/role-monitor/deploy_bcm_role_monitor.py --config automation/c
 
 ### Prometheus Integration
 
-The BCM role monitor automatically manages Prometheus service discovery:
+The BCM role monitor automatically manages Prometheus service discovery, eliminating the need for manual target configuration:
 
 - **Automatic Target Management**: When a node receives the `slurmclient` role, it creates a JSON file containing all three exporters (node_exporter, cgroup_exporter, gpu_exporter)
-- **Dynamic Updates**: Target files are automatically created/removed based on role assignment
+- **Dynamic Updates**: Target files are automatically created/removed based on role assignment changes
 - **Single File Per Node**: Each node manages one JSON file: `/cm/shared/apps/jobstats/prometheus-targets/<hostname>.json`
-- **Custom Directory Support**: Use `--prometheus-targets-dir` to specify a different shared storage location
+- **Custom Directory Support**: Use `--prometheus-targets-dir` to specify a different shared storage location for existing Prometheus deployments
+- **Hostname Change Resilient**: Automatically handles hostname changes via BCM imaging
 
-For detailed information, see:
-- `automation/role-monitor/CUSTOM_PROMETHEUS_TARGETS.md` - Custom targets directory configuration
-- `PROMETHEUS_DYNAMIC_TARGETS_SIMPLIFIED.md` - Technical implementation details
+**For comprehensive documentation**, see [automation/role-monitor/README.md](role-monitor/README.md)
 
 ### Configuration
 

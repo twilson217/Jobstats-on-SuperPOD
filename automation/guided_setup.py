@@ -152,9 +152,7 @@ class GuidedJobstatsSetup:
             'prometheus_retention_days': 365,
             'use_existing_prometheus': False,
             'use_existing_grafana': False,
-            'bcm_category_management': True,
-            'slurm_category': 'slurm-category',
-            'kubernetes_category': 'kubernetes-category',
+            'deploy_bcm_role_monitor': True,
             'systems': {
                 'slurm_controller': [],
                 'login_nodes': [],
@@ -1903,11 +1901,11 @@ EOF''',
             self._add_to_document("")
             return True
         
-        # Check if BCM category management is enabled
-        if not self.config.get('bcm_category_management', True):
-            print(f"\n{Colors.YELLOW}BCM category management is disabled in configuration.{Colors.END}")
+        # Check if BCM role monitor deployment is enabled
+        if not self.config.get('deploy_bcm_role_monitor', True):
+            print(f"\n{Colors.YELLOW}BCM role monitor deployment is disabled in configuration.{Colors.END}")
             print(f"{Colors.YELLOW}Skipping BCM role monitor deployment.{Colors.END}")
-            self._add_to_document("**Note:** BCM category management is disabled - skipping deployment.")
+            self._add_to_document("**Note:** BCM role monitor deployment is disabled in config - skipping deployment.")
             return True
         
         # Get DGX nodes from config

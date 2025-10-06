@@ -618,6 +618,8 @@ chown prometheus:prometheus /var/lib/prometheus
 
 ### Prometheus Configuration
 
+**Note:** When using the BCM role monitor service (recommended), target files are automatically managed via file-based service discovery. The JSON files containing host configurations are automatically added and removed by the role-monitor service as nodes are assigned or removed from the `slurmclient` role. See [automation/role-monitor/README.md](automation/role-monitor/README.md) for more information.
+
 ```yaml
 global:
   scrape_interval: 30s
@@ -631,9 +633,15 @@ scrape_configs:
       - targets: ['localhost:9090']
 
   - job_name: 'node_exporter'
-    static_configs:
-      - targets: 
-        - 'dgx-01:9100'
+    # Using file-based service discovery for automatic target management
+    file_sd_configs:
+      - files:
+          - '/cm/shared/apps/jobstats/prometheus-targets/*.json'
+        refresh_interval: 30s
+    relabel_configs:
+      - source_labels: [job]
+        regex: 'node_exporter'
+        action: keep
     metric_relabel_configs:
       - target_label: cluster
         replacement: slurm
@@ -642,17 +650,29 @@ scrape_configs:
         action: drop
 
   - job_name: 'cgroup_exporter'
-    static_configs:
-      - targets: 
-        - 'dgx-01:9306'
+    # Using file-based service discovery for automatic target management
+    file_sd_configs:
+      - files:
+          - '/cm/shared/apps/jobstats/prometheus-targets/*.json'
+        refresh_interval: 30s
+    relabel_configs:
+      - source_labels: [job]
+        regex: 'cgroup_exporter'
+        action: keep
     metric_relabel_configs:
       - target_label: cluster
         replacement: slurm
 
   - job_name: 'nvidia_gpu_exporter'
-    static_configs:
-      - targets: 
-        - 'dgx-01:9445'
+    # Using file-based service discovery for automatic target management
+    file_sd_configs:
+      - files:
+          - '/cm/shared/apps/jobstats/prometheus-targets/*.json'
+        refresh_interval: 30s
+    relabel_configs:
+      - source_labels: [job]
+        regex: 'gpu_exporter'
+        action: keep
     metric_relabel_configs:
       - target_label: cluster
         replacement: slurm

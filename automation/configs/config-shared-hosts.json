@@ -10,9 +10,8 @@
   "prometheus_retention_days": 365,
   "use_existing_prometheus": false,
   "use_existing_grafana": false,
-  "bcm_category_management": true,
-  "slurm_category": "slurm-category",
-  "kubernetes_category": "kubernetes-category",
+  "deploy_bcm_role_monitor": true,
+  "prometheus_targets_dir": "/cm/shared/apps/jobstats/targets/",
   "systems": {
     "slurm_controller": [
       "slogin-01"
