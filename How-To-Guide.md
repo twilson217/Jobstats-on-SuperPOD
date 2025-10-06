@@ -10,9 +10,9 @@ It can be used as a reference for what was done or as a manual implementation gu
 ## Table of Contents
 
 1. [Setup Overview](#1-setup-overview)
-2. [CPU Job Statistics](#2-cpu-job-stats)
-3. [GPU Job Statistics](#3-gpu-job-stats)
-4. [Node Statistics](#4-node-stats)
+2. [CPU Job Statistics](#2-cpu-job-statistics)
+3. [GPU Job Statistics](#3-gpu-job-statistics)
+4. [Node Statistics](#4-node-statistics)
 5. [Job Summaries](#5-job-summaries)
 6. [Prometheus](#6-prometheus)
 7. [Grafana](#7-grafana)
