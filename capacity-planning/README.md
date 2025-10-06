@@ -79,9 +79,12 @@ Per-Partition Storage Breakdown:
     Total storage:    49.3 GB
 
 Recommended Prometheus Server:
-  • Disk Space:         396 GB (2x for safety)
-  • RAM:                24 GB
-  • CPU Cores:          4-8 cores
+  • Disk Space (Database): 198 GB minimum
+                           396 GB recommended (2x for safety)
+  • Disk Space (Total):    446 GB (includes ~50 GB for OS/application)
+  • RAM:                   24 GB minimum
+                           48 GB recommended
+  • CPU Cores:             4-8 cores
 
 Scenario Comparisons:
   GPU nodes only:       82.5 GB
@@ -289,13 +292,17 @@ python3 prometheus_capacity_planner.py --retention-days 90 --scrape-interval 60
 
 ### Hardware Recommendations
 
-| Cluster Size | Disk | RAM | CPU |
-|--------------|------|-----|-----|
-| 10-20 nodes | 200 GB SSD | 16 GB | 4 cores |
-| 20-50 nodes | 500 GB SSD | 32 GB | 8 cores |
-| 50-100 nodes | 1 TB SSD | 64 GB | 16 cores |
+| Cluster Size | Database Storage | Total Disk (with OS) | RAM | CPU |
+|--------------|------------------|----------------------|-----|-----|
+| 10-20 nodes | 100-200 GB | 250-450 GB SSD | 8-16 GB | 4 cores |
+| 20-50 nodes | 200-500 GB | 450-1000 GB SSD | 16-32 GB | 8 cores |
+| 50-100 nodes | 500 GB-1 TB | 1-2 TB SSD | 32-64 GB | 16 cores |
 
-*Always provision 2x estimated storage for safety*
+**Notes:**
+- Database storage is for Prometheus TSDB only (2x estimated for safety)
+- Total disk includes ~50 GB overhead for OS, Prometheus binary, and working space
+- RAM minimum is 4 GB; actual needs scale with active time series (~1.5 KB per series)
+- Always provision 2x estimated database storage for safety margin
 
 ## Support
 

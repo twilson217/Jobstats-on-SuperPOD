@@ -734,18 +734,27 @@ class PrometheusCapacityPlanner:
         # Recommendations
         self.log(f"\n{Colors.BOLD}Recommended Prometheus Server Specifications:{Colors.END}", "INFO")
         
-        # Disk space (with 50% overhead for safety)
-        recommended_disk = estimate.total_storage_gb * 1.5
-        self.log(f"  • Disk Space:         {recommended_disk:.0f} GB minimum", "INFO")
-        self.log(f"                        {recommended_disk * 2:.0f} GB recommended (2x for safety)", "INFO")
+        # Disk space breakdown
+        # Database storage
+        recommended_db_disk = estimate.total_storage_gb * 1.5
+        self.log(f"  • Disk Space (Database): {recommended_db_disk:.0f} GB minimum", "INFO")
+        self.log(f"                           {recommended_db_disk * 2:.0f} GB recommended (2x for safety)", "INFO")
+        
+        # OS and application overhead
+        os_overhead = 50  # GB for OS, Prometheus binary, and working space
+        total_disk = (recommended_db_disk * 2) + os_overhead
+        self.log(f"  • Disk Space (Total):    {total_disk:.0f} GB (includes ~{os_overhead} GB for OS/application)", "INFO")
         
         # RAM (rough estimate: 1-2 KB per active time series)
-        recommended_ram_gb = (estimate.total_time_series * 1.5) / (1024 * 1024)
-        self.log(f"  • RAM:                {recommended_ram_gb:.0f} GB minimum", "INFO")
-        self.log(f"                        {recommended_ram_gb * 2:.0f} GB recommended", "INFO")
+        # Formula: time_series * 1.5 KB / 1024 = GB
+        recommended_ram_gb = (estimate.total_time_series * 1.5) / 1024
+        # Ensure minimum of 4 GB
+        recommended_ram_gb = max(recommended_ram_gb, 4)
+        self.log(f"  • RAM:                   {recommended_ram_gb:.0f} GB minimum", "INFO")
+        self.log(f"                           {max(recommended_ram_gb * 2, 8):.0f} GB recommended", "INFO")
         
         # CPU
-        self.log(f"  • CPU Cores:          4-8 cores recommended", "INFO")
+        self.log(f"  • CPU Cores:             4-8 cores recommended", "INFO")
         
         # Comparison scenarios
         self.log(f"\n{Colors.BOLD}Scenario Comparisons:{Colors.END}", "INFO")
