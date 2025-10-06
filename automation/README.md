@@ -2,6 +2,28 @@
 
 This project provides automated deployment of Princeton University's jobstats monitoring platform on BCM-managed DGX systems.
 
+## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Guided Setup Script](#guided-setup-script)
+  - [What it does](#what-it-does)
+  - [Input Files](#input-files)
+  - [Output Files](#output-files)
+  - [Usage](#usage)
+- [BCM Role Monitor Service](#bcm-role-monitor-service)
+  - [Overview](#overview)
+  - [Key Features](#key-features)
+  - [Architecture](#architecture)
+  - [Components](#components)
+  - [Deployment](#deployment)
+  - [Prometheus Integration](#prometheus-integration)
+  - [Configuration](#configuration)
+  - [Monitoring and Troubleshooting](#monitoring-and-troubleshooting)
+  - [Integration with BCM Imaging](#integration-with-bcm-imaging)
+- [Additional Automation Tools](#additional-automation-tools)
+
+---
+
 ## Prerequisites
 
 **Note**: The `setup.sh` script in the main README should have already handled these prerequisites:
