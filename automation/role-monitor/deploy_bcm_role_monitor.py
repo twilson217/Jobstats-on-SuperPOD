@@ -128,7 +128,7 @@ class BCMRoleMonitorDeployer:
             # Create remote directories
             subprocess.run([
                 'ssh', dgx_node, 
-                'mkdir -p /usr/local/bin /etc/bcm-role-monitor /var/lib/bcm-role-monitor /var/log'
+                'mkdir -p /usr/local/bin /etc/bcm-role-monitor /var/lib/bcm-role-monitor /var/log /cm/shared/apps/jobstats/prometheus-targets'
             ], check=True)
             
             # Copy Python script

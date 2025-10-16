@@ -587,17 +587,17 @@ python3 /tmp/update_slurm_conf.py''',
         cgroup_cmsh_commands = [
             {
                 'host': None,  # Run locally on BCM headnode
-                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "wlm;use {cluster_name};cgroups;set constrainramspace yes;commit"',
+                'command': f'/cm/local/apps/cmd/bin/cmsh -c "wlm;use {cluster_name};cgroups;set constrainramspace yes;commit"',
                 'description': f'cmsh -c "wlm;use {cluster_name};cgroups;set constrainramspace yes;commit"'
             },
             {
                 'host': None,  # Run locally on BCM headnode
-                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "wlm;use {cluster_name};cgroups;set constraincores yes;commit"',
+                'command': f'/cm/local/apps/cmd/bin/cmsh -c "wlm;use {cluster_name};cgroups;set constraincores yes;commit"',
                 'description': f'cmsh -c "wlm;use {cluster_name};cgroups;set constraincores yes;commit"'
             },
             {
                 'host': None,  # Run locally on BCM headnode
-                'command': f'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "wlm;use {cluster_name};set selecttypeparameters CR_Core_Memory;commit"',
+                'command': f'/cm/local/apps/cmd/bin/cmsh -c "wlm;use {cluster_name};set selecttypeparameters CR_Core_Memory;commit"',
                 'description': f'cmsh -c "wlm;use {cluster_name};set selecttypeparameters CR_Core_Memory;commit"'
             }
         ]
@@ -1226,7 +1226,7 @@ EOF''',
         bcm_commands = [
             {
                 'host': None,  # Run locally on BCM headnode
-                'command': 'source /etc/profile.d/modules.sh && module load cmsh && cmsh -c "wlm;use slurm;set epilogslurmctld /usr/local/sbin/slurmctldepilog.sh;commit"',
+                'command': '/cm/local/apps/cmd/bin/cmsh -c "wlm;use slurm;set epilogslurmctld /usr/local/sbin/slurmctldepilog.sh;commit"',
                 'description': 'cmsh -c "wlm;use slurm;set epilogslurmctld /usr/local/sbin/slurmctldepilog.sh;commit"'
             }
         ]
@@ -2134,7 +2134,7 @@ EOF''',
             imaging_instructions.append({
                 'host': host,
                 'node_type': node_type,
-                'command': f"source /etc/profile.d/modules.sh && module load cmsh && cmsh -c 'device;use {host};grabimage -w'",
+                'command': f"/cm/local/apps/cmd/bin/cmsh -c 'device;use {host};grabimage -w'",
                 'description': f"cmsh -c 'device;use {host};grabimage -w'"
             })
         

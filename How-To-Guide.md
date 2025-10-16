@@ -930,31 +930,31 @@ Execute the following commands to capture images for each node type:
 **Slurm Controller (slurmctl):**
 
 ```bash
-source /etc/profile.d/modules.sh && module load cmsh && cmsh -c 'device;use slurmctl;grabimage -w'
+cmsh -c 'device;use slurmctl;grabimage -w'
 ```
 
 **Login Node (login):**
 
 ```bash
-source /etc/profile.d/modules.sh && module load cmsh && cmsh -c 'device;use login;grabimage -w'
+cmsh -c 'device;use login;grabimage -w'
 ```
 
 **DGX (dgx-01):**
 
 ```bash
-source /etc/profile.d/modules.sh && module load cmsh && cmsh -c 'device;use dgx-01;grabimage -w'
+cmsh -c 'device;use dgx-01;grabimage -w'
 ```
 
 **Monitoring Server (prometheus):**
 
 ```bash
-source /etc/profile.d/modules.sh && module load cmsh && cmsh -c 'device;use prometheus;grabimage -w'
+cmsh -c 'device;use prometheus;grabimage -w'
 ```
 
 **Monitoring Server (grafana):**
 
 ```bash
-source /etc/profile.d/modules.sh && module load cmsh && cmsh -c 'device;use grafana;grabimage -w'
+cmsh -c 'device;use grafana;grabimage -w'
 ```
 
 #### Imaging Benefits

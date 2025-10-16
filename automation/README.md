@@ -72,6 +72,38 @@ uv run python automation/guided_setup.py --config automation/configs/config.json
 uv run python automation/guided_setup.py --config automation/configs/config.json --resume
 ```
 
+### Important: Prometheus and Grafana Deployment
+
+The guided setup script supports two deployment scenarios for Prometheus and Grafana:
+
+#### NEW Prometheus/Grafana Servers (Fully Automated)
+
+The guided setup **CAN deploy and configure NEW Prometheus and Grafana servers** automatically. This includes:
+- Installing Prometheus and Grafana binaries
+- Configuring services and systemd units
+- Setting up data sources and dashboards
+- Configuring scrape targets for exporters
+
+**SSH Key Requirements:**
+- The BCM head node's `/root/.ssh/id_ecdsa.pub` key must be added to `/root/.ssh/authorized_keys` on both servers
+- **BCM-managed servers**: SSH keys are typically configured automatically by BCM
+- **Non-BCM-managed servers**: You must set up passwordless SSH access manually before running guided setup
+
+#### EXISTING Prometheus/Grafana Servers (Manual Configuration Required)
+
+The guided setup **will NOT automate configuration for existing Prometheus and Grafana servers**. 
+
+For existing monitoring infrastructure:
+- Use `automation/configs/config-existing-monitoring.json` as a template
+- Set `"use_existing_prometheus": true` and/or `"use_existing_grafana": true`
+- The guided setup will skip installation but provide configuration guidance
+- **Refer to [How-To-Guide.md](../How-To-Guide.md)** for manual configuration steps for your existing servers
+
+**Why Manual Configuration for Existing Servers?**
+- Avoids overwriting existing monitoring configurations
+- Prevents disruption to other services using the same infrastructure
+- Allows integration with site-specific security and networking policies
+
 ## BCM Role Monitor Service
 
 The BCM role monitor is an automated service management system that runs on DGX nodes to monitor BCM role assignments and automatically manage jobstats exporter services based on configuration overlays.

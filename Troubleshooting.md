@@ -97,8 +97,6 @@ systemctl cat cgroup_exporter
 
 #### 3. Load Slurm Environment
 ```bash
-# Always load Slurm environment before running jobstats
-source /etc/profile.d/modules.sh
 module load slurm
 jobstats -j JOB_ID
 ```
@@ -129,7 +127,6 @@ srun --cpus-per-task=2 --mem=1G --time=60 --pty bash -c "echo 'CPU test'; sleep 
 #### 1. Load Slurm Environment
 ```bash
 # Load Slurm module
-source /etc/profile.d/modules.sh
 module load slurm
 
 # Verify Slurm commands work
@@ -393,7 +390,7 @@ cmsh -c "wlm;use slurm;cgroups;set constrainramspace yes"
 #### 2. Run Commands on BCM Headnode
 ```bash
 # Run cmsh commands on slurm_controller (BCM headnode)
-ssh slogin "cmsh -c 'wlm;use slurm;cgroups;set constrainramspace yes;commit'"
+ssh slogin "/cm/local/apps/cmd/bin/cmsh -c 'wlm;use slurm;cgroups;set constrainramspace yes;commit'"
 ```
 
 ### Issue: Prolog/Epilog Scripts Not Executing

@@ -32,6 +32,20 @@ chmod +x setup.sh
 
 For automated deployment with guided configuration, see the [Automation Guide](automation/README.md) for detailed information about running `automation/guided_setup.py` and other automated deployment options.
 
+**Important Notes on Prometheus/Grafana Deployment:**
+
+The `guided_setup.py` script can **deploy and configure NEW Prometheus and Grafana servers**, but it will **NOT automate configuration for existing Prometheus and Grafana servers**. 
+
+- **For NEW servers**: The guided setup will handle installation and configuration automatically
+- **For EXISTING servers**: Refer to the [How-To-Guide.md](How-To-Guide.md) for manual configuration steps
+
+**SSH Key Requirements for New Server Deployment:**
+
+For the guided setup to deploy to new Prometheus and Grafana servers, the BCM head node's SSH key must be configured:
+- The BCM `/root/.ssh/id_ecdsa.pub` key must be added to `/root/.ssh/authorized_keys` on both the Prometheus and Grafana servers
+- **If servers are BCM-managed**: SSH keys should be configured automatically by BCM
+- **If servers are NOT BCM-managed**: You must set up SSH key access manually before running the guided setup
+
 ### Manual Deployment
 
 For manual step-by-step deployment, see [How-To-Guide.md](How-To-Guide.md) for comprehensive instructions covering all aspects of the deployment process.

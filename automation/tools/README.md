@@ -144,35 +144,6 @@ python3 cpu_load_test.py --dry-run
 - Real-time progress reporting
 - Automatic cleanup on completion
 
-### cpu_test_job.sh
-
-**Purpose**: Slurm job script for running CPU load tests in a cluster environment.
-
-**Use Case**:
-- Submit CPU load tests as Slurm jobs
-- Test jobstats with actual job execution
-- Generate job statistics for validation
-- Run CPU tests on specific partitions/nodes
-
-**Usage**:
-```bash
-# Submit the job
-sbatch cpu_test_job.sh
-
-# Check job status
-squeue -u $USER
-
-# View job output
-cat cpu_test_<job_id>.out
-```
-
-**Features**:
-- Pre-configured Slurm job parameters
-- Automatic module loading
-- CPU load generation with multiple processes
-- Job output and error logging
-- Integration with jobstats monitoring
-
 ## Misc
 
 ### convert_pdfs.sh
